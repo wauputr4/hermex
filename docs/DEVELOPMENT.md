@@ -1,0 +1,93 @@
+# Development Guide
+
+## Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- Git
+
+## Backend setup
+
+```bash
+cd backend
+cp .env.example .env
+python3.11 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 18080
+```
+
+Backend URL:
+
+```text
+http://127.0.0.1:18080
+```
+
+Admin dashboard:
+
+```text
+http://127.0.0.1:18080/admin/dashboard
+```
+
+Default local admin credentials:
+
+```text
+admin / hermes-admin
+```
+
+Change the credentials in `backend/.env` before using this outside local development.
+
+## Frontend setup
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev -- --host 127.0.0.1 --port 18173
+```
+
+Frontend URL:
+
+```text
+http://127.0.0.1:18173
+```
+
+## AI provider setup
+
+You can configure the AI provider in two ways:
+
+- Environment variables in `backend/.env`.
+- Admin dashboard form under **Hermes AI provider**.
+
+The dashboard can save:
+
+- provider type,
+- OpenAI-compatible base URL,
+- API key,
+- model,
+- temperature,
+- max tokens.
+
+It can also sync model options from the configured endpoint's `/models` route.
+
+## Local smoke flow
+
+1. Open the frontend.
+2. Fill birth date, time, city, email, and optional name.
+3. Click **Buka Astrologyku**.
+4. Inspect the natal chart, planets, houses, and aspects.
+5. Click **Analisis Kosmik Saya**.
+6. Check the admin dashboard for saved guest history and prompt payload.
+
+## Recommended quality tools
+
+- Backend syntax check: `python3.11 -m py_compile backend/app/main.py`
+- Backend tests, when added: `python -m pytest`
+- Frontend build: `npm run build`
+
+## Workflow
+
+1. Create a feature branch from `main`.
+2. Keep feature scope small and update related docs.
+3. If API changes, update `README.md` and `docs/ARCHITECTURE.md`.
+4. Do not commit real `.env` files, SQLite databases, user data, or API keys.
+5. For UI changes, include screenshots or reproduction notes in the pull request.

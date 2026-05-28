@@ -1,0 +1,15 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+backend/.env
+backend/*.db
+backend/*.db-*
+backend/__pycache__/
+backend/app/__pycache__/
+backend/.venv/
+frontend/.env
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+*.log

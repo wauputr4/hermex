@@ -1,0 +1,6 @@
+# Optional full data/location extras.
+pytz==2024.2
+timezonefinder==6.5.7
+geopy==2.4.1
+pandas==2.2.3
+numpy==2.2.1

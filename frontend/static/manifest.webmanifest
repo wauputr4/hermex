@@ -1,0 +1,17 @@
+{
+  "name": "Hermex Quest",
+  "short_name": "Hermex",
+  "description": "A playful astrology reflection quest for career roadmaps.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff6ce",
+  "theme_color": "#ffc85a",
+  "icons": [
+    {
+      "src": "/icons/hermex-star.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
