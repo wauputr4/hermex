@@ -116,6 +116,11 @@ PUBLIC_APP_URL=https://hermex.fun
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change_this_password
 ADMIN_SESSION_SECRET=change_this_session_secret
+
+GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=https://hermex.fun/api/v1/auth/google/callback
+GOOGLE_SESSION_SECRET=change_this_google_session_secret
 ```
 
 Never commit real API keys. Runtime secrets are intentionally ignored by `.gitignore`.
@@ -165,6 +170,10 @@ The dashboard supports:
 - `POST /api/v1/interpretation`
 - `POST /api/v1/interpretation/ask`
 - `POST /api/v1/feedback`
+- `GET /api/v1/auth/google/start`
+- `GET /api/v1/auth/google/callback`
+- `GET /api/v1/auth/me`
+- `GET /api/v1/auth/logout`
 - `POST /api/v1/quests/start`
 - `POST /api/v1/quests/complete`
 - `GET /api/v1/roadmap/{profile_id}`

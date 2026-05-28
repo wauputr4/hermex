@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import html
 import json
 import os
@@ -238,6 +239,59 @@ def admin_session_token() -> str:
     password = os.getenv("ADMIN_PASSWORD", "hermes-admin")
     secret = os.getenv("ADMIN_SESSION_SECRET", "hermex-local-admin-session")
     return hashlib.sha256(f"{username}:{password}:{secret}".encode()).hexdigest()
+
+
+def public_app_url() -> str:
+    return os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:18173").strip().rstrip("/")
+
+
+def google_oauth_config() -> dict[str, str]:
+    return {
+        "client_id": os.getenv("GOOGLE_CLIENT_ID", "").strip(),
+        "client_secret": os.getenv("GOOGLE_CLIENT_SECRET", "").strip(),
+        "redirect_uri": os.getenv(
+            "GOOGLE_REDIRECT_URI",
+            "http://127.0.0.1:18080/api/v1/auth/google/callback",
+        ).strip(),
+        "session_secret": os.getenv(
+            "GOOGLE_SESSION_SECRET",
+            os.getenv("ADMIN_SESSION_SECRET", "hermex-local-google-session"),
+        ).strip(),
+    }
+
+
+def google_session_token(user: dict[str, Any]) -> str:
+    config = google_oauth_config()
+    payload = json.dumps(
+        {
+            "sub": user.get("sub"),
+            "email": user.get("email"),
+            "name": user.get("name"),
+            "picture": user.get("picture"),
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+        },
+        separators=(",", ":"),
+    )
+    signature = hmac.new(config["session_secret"].encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{signature}"
+
+
+def read_google_session(request: Request) -> dict[str, Any] | None:
+    token = request.cookies.get("hermex_google")
+    if not token or "." not in token:
+        return None
+    payload, signature = token.rsplit(".", 1)
+    expected = hmac.new(
+        google_oauth_config()["session_secret"].encode(),
+        payload.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not secrets.compare_digest(signature, expected):
+        return None
+    try:
+        return json.loads(payload)
+    except json.JSONDecodeError:
+        return None
 
 
 def is_admin_request(request: Request) -> bool:
@@ -863,6 +917,100 @@ def startup() -> None:
 @app.get("/api/v1/health")
 def health() -> dict[str, Any]:
     return {"status": "ok", "service": "hermex-api", "database": str(DB_PATH)}
+
+
+@app.get("/api/v1/auth/google/start")
+def google_auth_start() -> RedirectResponse:
+    config = google_oauth_config()
+    if not config["client_id"] or not config["client_secret"]:
+        raise HTTPException(status_code=503, detail="Google OAuth is not configured")
+    state = secrets.token_urlsafe(24)
+    query = urllib.parse.urlencode(
+        {
+            "client_id": config["client_id"],
+            "redirect_uri": config["redirect_uri"],
+            "response_type": "code",
+            "scope": "openid email profile",
+            "state": state,
+            "access_type": "offline",
+            "prompt": "select_account",
+        }
+    )
+    response = RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{query}", status_code=302)
+    response.set_cookie(
+        "hermex_oauth_state",
+        state,
+        httponly=True,
+        samesite="lax",
+        secure=public_app_url().startswith("https://"),
+        max_age=600,
+    )
+    return response
+
+
+@app.get("/api/v1/auth/google/callback")
+async def google_auth_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> RedirectResponse:
+    app_url = public_app_url()
+    if error:
+        return RedirectResponse(f"{app_url}/?auth=google_error", status_code=303)
+    expected_state = request.cookies.get("hermex_oauth_state")
+    if not code or not state or not expected_state or not secrets.compare_digest(state, expected_state):
+        return RedirectResponse(f"{app_url}/?auth=google_state_error", status_code=303)
+
+    config = google_oauth_config()
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            token_response = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": config["client_id"],
+                    "client_secret": config["client_secret"],
+                    "redirect_uri": config["redirect_uri"],
+                    "grant_type": "authorization_code",
+                },
+                headers={"Accept": "application/json"},
+            )
+            token_response.raise_for_status()
+            token_data = token_response.json()
+            user_response = await client.get(
+                "https://openidconnect.googleapis.com/v1/userinfo",
+                headers={"Authorization": f"Bearer {token_data['access_token']}"},
+            )
+            user_response.raise_for_status()
+            user = user_response.json()
+    except (httpx.HTTPError, KeyError, json.JSONDecodeError):
+        return RedirectResponse(f"{app_url}/?auth=google_exchange_error", status_code=303)
+
+    response = RedirectResponse(f"{app_url}/?auth=google_connected", status_code=303)
+    response.delete_cookie("hermex_oauth_state")
+    response.set_cookie(
+        "hermex_google",
+        google_session_token(user),
+        httponly=True,
+        samesite="lax",
+        secure=app_url.startswith("https://"),
+        max_age=60 * 60 * 24 * 30,
+    )
+    return response
+
+
+@app.get("/api/v1/auth/me")
+def auth_me(request: Request) -> dict[str, Any]:
+    user = read_google_session(request)
+    return {"authenticated": bool(user), "user": user}
+
+
+@app.get("/api/v1/auth/logout")
+def auth_logout() -> RedirectResponse:
+    response = RedirectResponse(public_app_url(), status_code=303)
+    response.delete_cookie("hermex_google")
+    return response
 
 
 @app.post("/api/v1/birth/analyze")
