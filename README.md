@@ -4,7 +4,7 @@
 
 Website/domain target: **https://hermex.fun**
 
-Repository target: **https://github.com/wauputra/hermex**
+Repository: **https://github.com/wauputr4/hermex**
 
 Hermex is intentionally open source: self-hosted users can run the full community edition with their own infrastructure and AI provider credentials.
 
