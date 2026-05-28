@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { analyzeBirth, interpretProfile, validateBirth } from '$lib/api/hermex';
+  import { analyzeBirth, askHermexDetail, getProfile, interpretProfile, submitFeedback as submitFeedbackApi, validateBirth } from '$lib/api/hermex';
 
   type Lang = 'id' | 'en';
-  type Screen = 'home' | 'profile' | 'hermes-loading' | 'hermes' | 'learn' | 'register' | 'ai-error';
+  type Screen = 'home' | 'profile' | 'hermes-loading' | 'hermes' | 'learn' | 'learn-detail' | 'register' | 'history' | 'connect' | 'hermes-chat' | 'ai-error';
+  type GuestHistoryItem = { profile_id: string; display_name?: string; birth_place: string; created_at: string; dominant: string; profile: any };
 
   const t = {
     id: {
@@ -11,22 +12,22 @@
       subtitle: 'Masukkan data lahir, lihat chart kosmik, lalu minta Hermes membaca pola umum untuk refleksi diri.',
       name: 'Nama', optional: 'opsional', date: 'Tanggal lahir', time: 'Jam lahir', place: 'Tempat lahir', citySearch: 'Cari kota lahir',
       analyze: 'Buka Astrologyku', analyzing: 'Membuka chart...', edit: 'Edit data', language: 'Bahasa', selectedCity: 'Kota terpilih',
-      locationHint: 'Lat/lon dan zona waktu ikut memengaruhi chart.', features: 'Yang bisa dicoba', profile: 'Kartu Karakter', chart: 'Chart Explorer',
+      locationHint: 'Lat/lon dan zona waktu ikut memengaruhi chart.', features: 'Yang bisa dicoba', profile: 'Kartu Karakter', chart: 'Chart Explorer', install: 'Install Hermex', installHint: 'Biar chart dan history guest tetap mudah dibuka lagi.', history: 'History', connect: 'Connect', hermexNav: 'Hermex AI',
       askHermes: 'Analisis Kosmik Saya', validating: 'Kunci kepastian', validate: 'Jawab validasi cepat', processingTitle: 'Hermes sedang membaca chart',
       processingBody: 'Menggabungkan posisi planet, zodiac, house, aspect, dan bahasa yang kamu pilih.', hermes: 'Analisis Kosmik Saya', summary: 'Ringkasan',
       strengths: 'Kekuatan', weaknesses: 'Kelemahan', love: 'Percintaan', interests: 'Minat', talents: 'Bakat', career: 'Arah Karier', fiveYear: 'Roadmap 5 tahun terakhir',
-      back: 'Kembali ke chart', askAgain: 'Tanya ulang Hermes', learn: 'Belajar Astrology', register: 'Daftar untuk penjelasan lengkap', feedback: 'Seberapa cocok hasilnya?', suggestion: 'Saran dan masukan (opsional)', sendFeedback: 'Kirim feedback', registerTitle: 'Daftar untuk membaca detail lengkap', registerBody: 'MVP ini belum menyimpan akun. Ini placeholder untuk halaman registrasi berikutnya.', email: 'Email', aiErrorTitle: 'Gagal menghubungkan AI Hermex', aiErrorBody: 'Hermes belum bisa terhubung ke provider AI. Chart kamu tetap aman; coba lagi sebentar lagi atau kembali ke chart.', retry: 'Coba lagi', ethics: 'Untuk refleksi dan pengembangan diri, bukan ramalan mutlak.'
+      back: 'Kembali ke chart', askAgain: 'Tanya ulang Hermes', learn: 'Belajar Astrology', register: 'Daftar untuk penjelasan lengkap', feedback: 'Seberapa cocok hasilnya?', suggestion: 'Saran dan masukan (opsional)', sendFeedback: 'Kirim feedback', share: 'Share profil guest', copied: 'Link tersalin', registerTitle: 'Daftar untuk membaca detail lengkap', registerBody: 'Masuk untuk menyimpan progres lintas perangkat. Untuk MVP, Google login masih berupa opsi tampilan.', googleLogin: 'Lanjut dengan Google', email: 'Email', aiErrorTitle: 'Gagal menghubungkan AI Hermex', aiErrorBody: 'Hermes belum bisa terhubung ke provider AI. Chart kamu tetap aman; coba lagi sebentar lagi atau kembali ke chart.', retry: 'Coba lagi', historyTitle: 'History Guest', emptyHistory: 'Belum ada history di perangkat ini.', askDetail: 'Tanya detail ke Hermex', askPlaceholder: 'Contoh: kenapa karier saya condong ke edukasi?', ethics: 'Untuk refleksi dan pengembangan diri, bukan ramalan mutlak.'
     },
     en: {
       badge: 'Alpha game', title: 'Start your tiny astrology quest.',
       subtitle: 'Enter birth context, inspect the cosmic chart, then ask Hermes for a general reflective reading.',
       name: 'Name', optional: 'optional', date: 'Birth date', time: 'Birth time', place: 'Birth place', citySearch: 'Search birth city',
       analyze: 'Open My Astrology', analyzing: 'Opening chart...', edit: 'Edit data', language: 'Language', selectedCity: 'Selected city',
-      locationHint: 'Latitude, longitude, and timezone influence the chart.', features: 'Things to try', profile: 'Character Card', chart: 'Chart Explorer',
+      locationHint: 'Latitude, longitude, and timezone influence the chart.', features: 'Things to try', profile: 'Character Card', chart: 'Chart Explorer', install: 'Install Hermex', installHint: 'Keep your guest chart and history easy to reopen.', history: 'History', connect: 'Connect', hermexNav: 'Hermex AI',
       askHermes: 'My Cosmic Analysis', validating: 'Confidence key', validate: 'Answer quick validation', processingTitle: 'Hermes is reading your chart',
       processingBody: 'Combining planets, zodiac, houses, aspects, and your selected language.', hermes: 'My Cosmic Analysis', summary: 'Summary',
       strengths: 'Strengths', weaknesses: 'Weaknesses', love: 'Love', interests: 'Interests', talents: 'Talents', career: 'Career Paths', fiveYear: 'Last 5-Year Roadmap',
-      back: 'Back to chart', askAgain: 'Ask Hermes again', learn: 'Learn Astrology', register: 'Register for full explanation', feedback: 'How accurate did this feel?', suggestion: 'Suggestions and feedback (optional)', sendFeedback: 'Send feedback', registerTitle: 'Register to read the full detail', registerBody: 'This MVP does not create accounts yet. This is a placeholder for the next registration flow.', email: 'Email', aiErrorTitle: 'Could not connect Hermex AI', aiErrorBody: 'Hermes could not reach the AI provider. Your chart is safe; try again in a moment or return to the chart.', retry: 'Retry', ethics: 'For reflection and self-development, not deterministic prediction.'
+      back: 'Back to chart', askAgain: 'Ask Hermes again', learn: 'Learn Astrology', register: 'Register for full explanation', feedback: 'How accurate did this feel?', suggestion: 'Suggestions and feedback (optional)', sendFeedback: 'Send feedback', share: 'Share guest profile', copied: 'Link copied', registerTitle: 'Register to read the full detail', registerBody: 'Sign in to keep progress across devices. For this MVP, Google login is a visual option.', googleLogin: 'Continue with Google', email: 'Email', aiErrorTitle: 'Could not connect Hermex AI', aiErrorBody: 'Hermes could not reach the AI provider. Your chart is safe; try again in a moment or return to the chart.', retry: 'Retry', historyTitle: 'Guest History', emptyHistory: 'No local history on this device yet.', askDetail: 'Ask Hermex for detail', askPlaceholder: 'Example: why does my career lean toward education?', ethics: 'For reflection and self-development, not deterministic prediction.'
     }
   } satisfies Record<Lang, Record<string, string>>;
 
@@ -68,6 +69,14 @@
   let profile: any = null;
   let validation: any = null;
   let interpretation: any = null;
+  let installPromptEvent: any = null;
+  let canInstall = false;
+  let guestHistory: GuestHistoryItem[] = [];
+  let shareStatus = '';
+  let detailQuestion = '';
+  let detailAnswer = '';
+  let detailLoading = false;
+  let storageReady = false;
 
   $: copy = t[lang];
 
@@ -118,6 +127,20 @@
         ['Aspects', 'Aspects are planet relationships. Trines flow, squares challenge, oppositions ask integration.']
       ];
 
+  $: educationDetailRows = lang === 'id'
+    ? [
+        [['Matahari', 'Identitas, vitalitas, arah sadar.'], ['Bulan', 'Emosi, kebutuhan aman, kebiasaan batin.'], ['Merkurius', 'Cara berpikir, bahasa, belajar.'], ['Venus', 'Rasa suka, relasi, estetika.'], ['Mars', 'Aksi, keberanian, dorongan.'], ['Jupiter', 'Ekspansi, makna, peluang.'], ['Saturnus', 'Struktur, batas, kedewasaan.']],
+        [['Aries', 'Langsung, berani, memulai.'], ['Taurus', 'Stabil, sensorial, konsisten.'], ['Gemini', 'Komunikatif, ingin tahu, adaptif.'], ['Cancer', 'Emosional, merawat, protektif.'], ['Leo', 'Ekspresif, kreatif, terlihat.'], ['Virgo', 'Analitis, rapi, memperbaiki.'], ['Libra', 'Relasional, adil, harmonis.'], ['Scorpio', 'Intens, mendalam, transformatif.'], ['Sagittarius', 'Eksploratif, filosofis, luas.'], ['Capricorn', 'Struktural, ambisius, bertahap.'], ['Aquarius', 'Inovatif, komunitas, visioner.'], ['Pisces', 'Imajinatif, empatik, spiritual.']],
+        [['House 1', 'Diri, tubuh, kesan pertama.'], ['House 2', 'Nilai, uang, rasa aman.'], ['House 3', 'Komunikasi, belajar, saudara.'], ['House 4', 'Rumah, akar, keluarga.'], ['House 5', 'Kreativitas, romansa, ekspresi.'], ['House 6', 'Rutinitas, kerja harian, kesehatan.'], ['House 7', 'Relasi, pasangan, kerja sama.'], ['House 8', 'Kedalaman, krisis, transformasi.'], ['House 9', 'Makna, perjalanan, pendidikan tinggi.'], ['House 10', 'Karier, reputasi, arah publik.'], ['House 11', 'Komunitas, harapan, jejaring.'], ['House 12', 'Bawah sadar, retreat, pelepasan.']],
+        [['Conjunction', 'Energi planet menyatu dan terasa kuat.'], ['Sextile', 'Peluang yang mengalir saat diaktifkan.'], ['Square', 'Tegangan yang mendorong latihan.'], ['Trine', 'Bakat natural dan aliran mudah.'], ['Opposition', 'Dua kutub yang perlu diintegrasikan.']]
+      ][activeEducation]
+    : [
+        [['Sun', 'Identity, vitality, conscious direction.'], ['Moon', 'Emotion, safety needs, inner habits.'], ['Mercury', 'Thinking, language, learning.'], ['Venus', 'Taste, relationships, aesthetics.'], ['Mars', 'Action, courage, drive.'], ['Jupiter', 'Expansion, meaning, opportunity.'], ['Saturn', 'Structure, boundaries, maturity.']],
+        [['Aries', 'Direct, brave, initiating.'], ['Taurus', 'Stable, sensory, consistent.'], ['Gemini', 'Communicative, curious, adaptive.'], ['Cancer', 'Emotional, caring, protective.'], ['Leo', 'Expressive, creative, visible.'], ['Virgo', 'Analytical, tidy, improving.'], ['Libra', 'Relational, fair, harmonious.'], ['Scorpio', 'Intense, deep, transformative.'], ['Sagittarius', 'Exploratory, philosophical, broad.'], ['Capricorn', 'Structural, ambitious, gradual.'], ['Aquarius', 'Innovative, communal, visionary.'], ['Pisces', 'Imaginative, empathic, spiritual.']],
+        [['House 1', 'Self, body, first impression.'], ['House 2', 'Values, money, security.'], ['House 3', 'Communication, learning, siblings.'], ['House 4', 'Home, roots, family.'], ['House 5', 'Creativity, romance, expression.'], ['House 6', 'Routine, daily work, health.'], ['House 7', 'Relationships, partners, cooperation.'], ['House 8', 'Depth, crisis, transformation.'], ['House 9', 'Meaning, travel, higher learning.'], ['House 10', 'Career, reputation, public direction.'], ['House 11', 'Community, hopes, networks.'], ['House 12', 'Unconscious, retreat, release.']],
+        [['Conjunction', 'Planet energies merge and feel strong.'], ['Sextile', 'Opportunities that flow when activated.'], ['Square', 'Tension that pushes practice.'], ['Trine', 'Natural talent and easy flow.'], ['Opposition', 'Two poles that ask integration.']]
+      ][activeEducation];
+
   $: features = lang === 'id'
     ? [
         ['Natal Chart', 'Lihat zodiac sign, planet, house, dan aspect.'],
@@ -147,8 +170,41 @@
 
   onMount(() => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+    const draft = localStorage.getItem('hermex_guest_draft');
+    if (draft) {
+      try {
+        const saved = JSON.parse(draft);
+        display_name = saved.display_name ?? display_name;
+        birth_date = saved.birth_date ?? birth_date;
+        birth_time = saved.birth_time ?? birth_time;
+        birth_place = saved.birth_place ?? birth_place;
+        email = saved.email ?? email;
+        cityQuery = saved.cityQuery ?? cityQuery;
+        selectedCity = saved.selectedCity ?? selectedCity;
+      } catch { /* ignore broken local draft */ }
+    }
+    guestHistory = loadGuestHistory();
+    storageReady = true;
+    const params = new URLSearchParams(window.location.search);
+    const sharedProfile = params.get('profile');
+    if (sharedProfile) {
+      getProfile(sharedProfile).then((loaded) => {
+        profile = loaded;
+        rememberGuest(loaded);
+        screen = 'profile';
+      }).catch(() => undefined);
+    }
+    const installHandler = (event: Event) => {
+      event.preventDefault();
+      installPromptEvent = event;
+      canInstall = true;
+    };
+    window.addEventListener('beforeinstallprompt', installHandler);
     const timer = window.setInterval(() => (quoteIndex = (quoteIndex + 1) % quotes.length), 2600);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('beforeinstallprompt', installHandler);
+    };
   });
 
   function toggleLang() { lang = lang === 'id' ? 'en' : 'id'; }
@@ -194,12 +250,85 @@
   function roadmapTitle(item: any, index: number) { return item?.year || item?.horizon || `Year ${index + 1}`; }
   function roadmapText(item: any) { return item?.description || item?.focus || item?.theme || displayValue(item); }
   function explainMore() { screen = 'register'; }
-  function submitFeedback() { feedbackText = ''; rating = 0; }
+  function loadGuestHistory(): GuestHistoryItem[] {
+    try { return JSON.parse(localStorage.getItem('hermex_guest_history') || '[]'); }
+    catch { return []; }
+  }
+  function rememberGuest(nextProfile: any) {
+    if (!nextProfile?.profile_id) return;
+    const item = {
+      profile_id: nextProfile.profile_id,
+      display_name: nextProfile.display_name,
+      birth_place: nextProfile.birth_place,
+      created_at: nextProfile.created_at,
+      dominant: nextProfile.traits?.dominant_element ?? '-',
+      profile: nextProfile
+    };
+    guestHistory = [item, ...guestHistory.filter((entry) => entry.profile_id !== item.profile_id)].slice(0, 12);
+    localStorage.setItem('hermex_guest_history', JSON.stringify(guestHistory));
+  }
+  async function installApp() {
+    if (!installPromptEvent) {
+      canInstall = false;
+      return;
+    }
+    await installPromptEvent.prompt();
+    installPromptEvent = null;
+    canInstall = false;
+  }
+  async function shareProfile() {
+    if (!profile?.profile_id) return;
+    const link = `${window.location.origin}${window.location.pathname}?profile=${profile.profile_id}`;
+    if (navigator.share) await navigator.share({ title: 'Hermex Quest', text: 'Coba lihat chart Hermex guest ini.', url: link }).catch(() => undefined);
+    else await navigator.clipboard?.writeText(link).catch(() => undefined);
+    shareStatus = copy.copied;
+    window.setTimeout(() => (shareStatus = ''), 1600);
+  }
+  async function submitFeedback() {
+    if (!rating) return;
+    await submitFeedbackApi({ profile_id: profile?.profile_id, interpretation_id: interpretation?.interpretation_id, rating, message: feedbackText, source: 'pwa' }).catch(() => undefined);
+    feedbackText = '';
+    rating = 0;
+  }
+  async function askDetail() {
+    if (!profile || !detailQuestion.trim()) return;
+    detailLoading = true;
+    detailAnswer = '';
+    try {
+      const result: any = await askHermexDetail(profile.profile_id, lang, detailQuestion.trim());
+      detailAnswer = displayValue(result?.interpretation?.summary || result?.interpretation);
+    } catch (err) {
+      detailAnswer = err instanceof Error ? err.message : 'Unknown error';
+    } finally {
+      detailLoading = false;
+    }
+  }
+  function openHistoryItem(item: GuestHistoryItem) {
+    profile = item.profile;
+    screen = 'profile';
+  }
+
+  function escapeHtml(value: string) {
+    const map: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return value.replace(/[&<>"']/g, (char) => map[char] || char);
+  }
+  function formatInsight(item: string) {
+    const text = escapeHtml(item);
+    const split = text.split(/[:;,-]\s+/);
+    if (split.length > 1 && split[0].length < 46) return `<strong>${split[0]}</strong>: ${split.slice(1).join(' ')}`;
+    const words = text.split(' ');
+    return `<strong>${words.slice(0, 3).join(' ')}</strong>${words.length > 3 ? ` ${words.slice(3).join(' ')}` : ''}`;
+  }
+
+  $: if (storageReady) {
+    localStorage.setItem('hermex_guest_draft', JSON.stringify({ display_name, birth_date, birth_time, birth_place, email, cityQuery, selectedCity }));
+  }
 
   async function runAnalysis() {
     loading = true; error = ''; interpretation = null; validation = null;
     try {
       profile = await analyzeBirth({ display_name, birth_date, birth_place, ...(birth_time ? { birth_time } : {}), ...(selectedCity ? { latitude: selectedCity.latitude, longitude: selectedCity.longitude, timezone: selectedCity.timezone } : {}) });
+      rememberGuest(profile);
       screen = 'profile';
     } catch (err) { error = err instanceof Error ? err.message : 'Unknown error'; }
     finally { loading = false; }
@@ -237,10 +366,12 @@
 
     {#if screen === 'home'}
       <section class="hero-card"><div><span>{copy.features}</span><h1>{copy.title}</h1><p>{copy.subtitle}</p></div><svg viewBox="0 0 220 220"><circle cx="110" cy="110" r="82"/><circle cx="110" cy="110" r="50"/><path d="M138 47a31 31 0 1 0 0 62 38 38 0 1 1 0-62z"/><circle cx="49" cy="83" r="13"/><circle cx="171" cy="148" r="16"/><path d="M101 128l8 18 18 8-18 8-8 18-8-18-18-8 18-8 8-18z"/></svg></section>
+      <button class="install-badge show" on:click={installApp}>⬇ {copy.install}<small>{copy.installHint}</small></button>
       <section class="feature-row">{#each features as feature, index}<button class:active={activeFeature === index} on:click={() => (activeFeature = index)}>{@render Icon(index)}<strong>{feature[0]}</strong><small>{feature[1]}</small></button>{/each}</section>
       <button class="learn-strip" on:click={() => (screen = 'learn')}>☿ {copy.learn}</button>
+      <button class="learn-strip history-strip" on:click={() => (screen = 'history')}>⌁ {copy.history} · {guestHistory.length}</button>
       <section class="home-grid single"><article class="card form-card"><div class="section-title"><span>01</span><h2>Profil Pemain</h2></div>
-        <div class="split"><label>{copy.date}<input type="date" bind:value={birth_date} /></label><label>{copy.time} <small>{copy.optional}</small><input type="time" bind:value={birth_time} /></label></div>
+        <div class="split"><label>{copy.date}<input type="date" bind:value={birth_date} /></label><label>{copy.time} <small>{copy.optional}</small><input type="time" bind:value={birth_time} /><small class="field-hint">{lang === 'id' ? 'Semakin detail, house dan aspek chart makin akurat.' : 'More detail improves houses and chart precision.'}</small></label></div>
         <label class="city-picker">{copy.place}<input value={cityQuery} placeholder={copy.citySearch} autocomplete="off" role="combobox" aria-controls="city-options" aria-expanded={cityPickerOpen ? 'true' : 'false'} on:focus={() => (cityPickerOpen = true)} on:input={(event) => onCityInput(event.currentTarget.value)} />{#if cityPickerOpen && filteredCities.length}<div class="city-menu" id="city-options">{#each filteredCities as city}<button type="button" on:mousedown|preventDefault={() => chooseCity(city)}><strong>{city.label}</strong><small>{city.latitude.toFixed(4)}, {city.longitude.toFixed(4)} · {city.timezone}</small></button>{/each}</div>{/if}</label>
         {#if selectedCity}<p class="location-note">{copy.selectedCity}: {selectedCity.label}<br />{copy.locationHint}</p>{/if}
         <label>{copy.email} <small>{copy.optional}</small><input type="email" bind:value={email} placeholder="you@example.com" /></label>
@@ -256,21 +387,49 @@
 
     {#if screen === 'hermes-loading'}<section class="loading-screen"><div class="loader"><span></span><span></span><span></span><strong>☿</strong></div><h2>{copy.processingTitle}</h2><p class="quote">{quotes[quoteIndex]}</p><small>{copy.processingBody}</small></section>{/if}
 
-    {#if screen === 'hermes' && oracle}<section class="card hermes-card"><div class="section-title"><span>04</span><h2>{copy.hermes}</h2></div><div class="summary-card">{@render Icon(1)}<p><mark>{summaryHighlight.lead}</mark>{#if summaryHighlight.rest}<br /><span>{summaryHighlight.rest}</span>{/if}</p></div><div class="insight-grid">{@render Insight(copy.love, oracle.love, '♡')}{@render Insight(copy.strengths, oracle.strengths, '✦')}{@render Insight(copy.weaknesses, oracle.weaknesses, '△')}{@render Insight(copy.interests, oracle.interests, '☉')}{@render Insight(copy.talents, oracle.talents, '☾')}{@render Insight(copy.career, oracle.careers, '☿')}</div><div class="timeline"><h3>{copy.fiveYear}</h3>{#each oracle.fiveYear.slice(0, 5) as item, index}<div><span>{roadmapTitle(item, index)}</span><p>{roadmapText(item)}</p></div>{/each}<button class="text-link" on:click={explainMore}>{copy.register}</button></div><div class="feedback"><h3>{copy.feedback}</h3><div class="stars">{#each [1,2,3,4,5] as star}<button class:active={rating >= star} on:click={() => (rating = star)}>★</button>{/each}</div><textarea bind:value={feedbackText} placeholder={copy.suggestion}></textarea><button class="soft-action" on:click={submitFeedback}>{copy.sendFeedback}</button></div><div class="route-actions"><button class="soft-action" on:click={() => (screen = 'profile')}>{copy.back}</button><button class="soft-action oracle-button" on:click={runInterpretation}>{copy.askAgain}</button></div></section>{/if}
+    {#if screen === 'hermes' && oracle}<section class="card hermes-card"><div class="section-title"><span>04</span><h2>{copy.hermes}</h2></div><div class="summary-card">{@render Icon(1)}<p><mark>{summaryHighlight.lead}</mark>{#if summaryHighlight.rest}<br /><span>{summaryHighlight.rest}</span>{/if}</p></div><div class="insight-grid">{@render Insight(copy.love, oracle.love, '♡')}{@render Insight(copy.strengths, oracle.strengths, '✦')}{@render Insight(copy.weaknesses, oracle.weaknesses, '△')}{@render Insight(copy.interests, oracle.interests, '☉')}{@render Insight(copy.talents, oracle.talents, '☾')}{@render Insight(copy.career, oracle.careers, '☿')}</div><div class="timeline"><h3>{copy.fiveYear}</h3>{#each oracle.fiveYear.slice(0, 5) as item, index}<div><span>{roadmapTitle(item, index)}</span><p>{roadmapText(item)}</p></div>{/each}<button class="text-link" on:click={explainMore}>{copy.register}</button></div><div class="feedback"><h3>{copy.feedback}</h3><div class="stars">{#each [1,2,3,4,5] as star}<button class:active={rating >= star} on:click={() => (rating = star)}>★</button>{/each}</div><textarea bind:value={feedbackText} placeholder={copy.suggestion}></textarea><button class="soft-action" on:click={submitFeedback}>{copy.sendFeedback}</button><button class="share-action" on:click={shareProfile}>↗ {copy.share}</button>{#if shareStatus}<small>{shareStatus}</small>{/if}</div><div class="route-actions"><button class="soft-action" on:click={() => (screen = 'profile')}>{copy.back}</button><button class="soft-action oracle-button" on:click={runInterpretation}>{copy.askAgain}</button></div></section>{/if}
 
 
 
     {#if screen === 'ai-error'}<section class="card ai-error-page"><div class="section-title"><span>!</span><h2>{copy.aiErrorTitle}</h2></div><div class="error-visual">{@render Icon(1, true)}<p>{copy.aiErrorBody}</p></div><div class="route-actions"><button class="soft-action" on:click={() => (screen = 'profile')}>{copy.back}</button><button class="soft-action oracle-button" on:click={runInterpretation}>{copy.retry}</button></div></section>{/if}
 
-    {#if screen === 'learn'}<section class="card learn-page"><div class="section-title"><span>☿</span><h2>{copy.learn}</h2></div><div class="education-grid">{#each educationCards as card, index}<button class:active={activeEducation === index} on:click={() => (activeEducation = index)}>{@render Icon(index)}<h3>{card[0]}</h3><p>{card[1]}</p></button>{/each}</div><article class="education-detail">{@render Icon(activeEducation, true)}<div><h3>{educationCards[activeEducation][0]}</h3><p>{educationCards[activeEducation][1]}</p><p>{lang === 'id' ? 'Bayangkan ini seperti lapisan peta: planet adalah aktor, zodiac adalah gaya bicara, house adalah panggung, dan aspect adalah hubungan antar aktor.' : 'Think of this as map layers: planets are actors, zodiac signs are speaking styles, houses are stages, and aspects are relationships between actors.'}</p></div></article><button class="soft-action" on:click={() => (screen = 'home')}>{copy.back}</button></section>{/if}
-    {#if screen === 'register'}<section class="card register-page"><div class="section-title"><span>✦</span><h2>{copy.registerTitle}</h2></div><p>{copy.registerBody}</p><div class="split"><input placeholder="Email" /><input placeholder="Nama" /></div><button class="primary-action" on:click={() => (screen = 'hermes')}>{copy.back}</button></section>{/if}
+    {#if screen === 'learn'}<section class="card learn-page"><div class="section-title"><span>☿</span><h2>{copy.learn}</h2></div><div class="education-grid">{#each educationCards as card, index}<button class:active={activeEducation === index} on:click={() => { activeEducation = index; screen = 'learn-detail'; }}>{@render Icon(index)}<h3>{card[0]}</h3><p>{card[1]}</p><small>{lang === 'id' ? 'Buka detail' : 'Open detail'}</small></button>{/each}</div><button class="soft-action" on:click={() => (screen = 'home')}>{copy.back}</button></section>{/if}
+    {#if screen === 'learn-detail'}<section class="card learn-page detail-page"><div class="section-title"><span>☿</span><h2>{educationCards[activeEducation][0]}</h2></div><article class="education-detail">{@render Icon(activeEducation, true)}<div><p>{educationCards[activeEducation][1]}</p><p>{lang === 'id' ? 'Bayangkan ini seperti lapisan peta: planet adalah aktor, zodiac adalah gaya bicara, house adalah panggung, dan aspect adalah hubungan antar aktor.' : 'Think of this as map layers: planets are actors, zodiac signs are speaking styles, houses are stages, and aspects are relationships between actors.'}</p></div></article><div class="detail-list">{#each educationDetailRows as row}<article><strong>{row[0]}</strong><p>{row[1]}</p></article>{/each}</div><button class="soft-action" on:click={() => (screen = 'learn')}>{copy.learn}</button></section>{/if}
+    {#if screen === 'history'}<section class="card history-page"><div class="section-title"><span>⌁</span><h2>{copy.historyTitle}</h2></div>{#if guestHistory.length}<div class="history-list">{#each guestHistory as item}<button on:click={() => openHistoryItem(item)}><strong>{item.display_name || 'Guest'}</strong><span>{item.birth_place}</span><small>{item.dominant} · {new Date(item.created_at).toLocaleDateString()}</small></button>{/each}</div>{:else}<p>{copy.emptyHistory}</p>{/if}</section>{/if}
+    {#if screen === 'connect'}<section class="card connect-page"><div class="section-title"><span>↗</span><h2>{copy.connect}</h2></div><p>{lang === 'id' ? 'Bagikan profil guest sebagai ajakan mencoba Hermex. Login Google disiapkan untuk versi berikutnya.' : 'Share your guest profile as an invitation to try Hermex. Google login is prepared for the next version.'}</p><button class="google-action" on:click={() => (screen = 'register')}>G {copy.googleLogin}</button><button class="share-action" on:click={shareProfile}>↗ {copy.share}</button>{#if shareStatus}<small>{shareStatus}</small>{/if}</section>{/if}
+    {#if screen === 'hermes-chat'}<section class="card chat-page"><div class="section-title"><span>☿</span><h2>{copy.hermexNav}</h2></div><p>{copy.askDetail}</p><textarea bind:value={detailQuestion} placeholder={copy.askPlaceholder}></textarea><button class="soft-action oracle-button" on:click={askDetail} disabled={detailLoading || !profile}>{detailLoading ? copy.analyzing : copy.askDetail}</button>{#if !profile}<p class="error">{lang === 'id' ? 'Buka Astrologyku dulu agar Hermex punya chart untuk dibaca.' : 'Open your astrology first so Hermex has a chart to read.'}</p>{/if}{#if detailAnswer}<div class="detail-answer">{@render Icon(1)}<p>{detailAnswer}</p></div>{/if}</section>{/if}
+    {#if screen === 'register'}<section class="card register-page"><div class="section-title"><span>✦</span><h2>{copy.registerTitle}</h2></div><p>{copy.registerBody}</p><button class="google-action" on:click={() => undefined}>G {copy.googleLogin}</button><div class="split"><input placeholder="Email" /><input placeholder="Nama" /></div><button class="primary-action" on:click={() => (screen = 'hermes')}>{copy.back}</button></section>{/if}
+    <nav class="bottom-nav"><button class:active={screen === 'profile'} on:click={() => (screen = profile ? 'profile' : 'home')}>✦<span>{copy.profile}</span></button><button class:active={screen === 'connect'} on:click={() => (screen = 'connect')}>↗<span>{copy.connect}</span></button><button class:active={screen === 'hermes-chat'} on:click={() => (screen = 'hermes-chat')}>☿<span>{copy.hermexNav}</span></button></nav>
     <footer>{copy.ethics}</footer>
   </section>
 </main>
 
 {#snippet Icon(kind: number, big = false)}<svg class:big viewBox="0 0 64 64"><circle cx="32" cy="32" r="25"/><path d={kind === 0 ? 'M32 10l5 16 17 1-14 10 5 17-13-10-13 10 5-17-14-10 17-1 5-16z' : kind === 1 ? 'M43 14a20 20 0 1 0 0 40 26 26 0 1 1 0-40z' : kind === 2 ? 'M17 44c8-22 22-30 38-22-5 20-18 29-38 22z' : 'M32 10l7 15 15 7-15 7-7 15-7-15-15-7 15-7 7-15z'} /></svg>{/snippet}
-{#snippet Insight(title: string, items: string[], icon: string)}<article class="insight"><div><span>{icon}</span><h3>{title}</h3></div>{#if items.length}<ul>{#each items.slice(0, 4) as item}<li>{item}</li>{/each}</ul>{:else}<p>-</p>{/if}</article>{/snippet}
+{#snippet Insight(title: string, items: string[], icon: string)}<article class="insight"><div><span>{icon}</span><h3>{title}</h3></div>{#if items.length}<ul>{#each items.slice(0, 4) as item}<li>{@html formatInsight(item)}</li>{/each}</ul>{:else}<p>-</p>{/if}</article>{/snippet}
 
 <style>
   :global(*){box-sizing:border-box}:global(body){margin:0;color:#45304f;background:radial-gradient(circle at 12% 8%,rgba(244,193,93,.5),transparent 22rem),radial-gradient(circle at 88% 16%,rgba(128,213,187,.42),transparent 24rem),linear-gradient(145deg,#fff8df,#f5e4ee 52%,#dff5ed);font-family:Avenir Next,Nunito,Trebuchet MS,sans-serif}.app-shell{min-height:100vh;padding:22px}.phone-frame{width:min(1080px,100%);margin:0 auto;border:5px solid rgba(69,48,79,.12);border-radius:38px;background:rgba(255,253,243,.88);box-shadow:0 30px 90px rgba(82,47,79,.16);padding:24px;position:relative;overflow:hidden}.phone-frame:before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,rgba(69,48,79,.07) 1px,transparent 1.5px);background-size:26px 26px;pointer-events:none}.topbar,.hero-card,.feature-row,.home-grid,.profile-grid,.loading-screen,.hermes-card,footer{position:relative;z-index:1}.topbar{display:flex;align-items:center;gap:12px;margin-bottom:18px}.brand{display:flex;align-items:center;gap:12px}.brand svg{width:54px;height:54px;border-radius:18px;background:#fff2aa;padding:8px;fill:#f4c15d;stroke:#45304f;stroke-width:3}.brand circle{fill:#45304f;stroke:none}.brand path:last-child{fill:none;stroke-linecap:round}.brand p{margin:0;color:#8f6884;font-size:.75rem;font-weight:850;letter-spacing:.1em;text-transform:uppercase}.brand strong{font-size:1.18rem}.lang,.ghost{margin-left:auto;border:0;border-radius:999px;padding:10px 14px;background:#45304f;color:#fff7cf;font-weight:900;cursor:pointer}.ghost{background:rgba(69,48,79,.1);color:#45304f}.ghost+.lang{margin-left:6px}.hero-card{display:grid;grid-template-columns:1fr 210px;gap:18px;align-items:center;padding:28px;border-radius:34px;background:linear-gradient(135deg,#fff0a8,#f4cbd5 56%,#c9f1e3);box-shadow:0 18px 48px rgba(126,79,109,.14)}.hero-card span{display:inline-flex;border-radius:999px;padding:8px 12px;background:rgba(255,255,255,.7);color:#805d78;font-size:.78rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}h1{margin:14px 0 12px;max-width:680px;font-size:clamp(2.25rem,7vw,5.2rem);line-height:.88;letter-spacing:-.07em;font-weight:950}.hero-card p{margin:0;color:rgba(69,48,79,.74);font-size:1.02rem;line-height:1.55;font-weight:730}.hero-card svg{width:100%}.hero-card circle:nth-child(-n+2){fill:none;stroke:rgba(69,48,79,.2);stroke-width:6;stroke-dasharray:9 11;animation:spin 24s linear infinite;transform-origin:center}.hero-card path:nth-child(3){fill:#fff8c7;stroke:#45304f;stroke-width:5}.hero-card circle:nth-child(n+4){fill:#80d5bb;stroke:#45304f;stroke-width:5}.hero-card path:last-child{fill:#f09d73;stroke:#45304f;stroke-width:5}.feature-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:18px 0}.feature-row button{display:grid;grid-template-columns:42px 1fr;gap:8px;align-items:center;text-align:left;border:2px solid transparent;border-radius:22px;background:rgba(255,255,255,.72);padding:14px;color:#45304f;cursor:pointer}.feature-row button.active{border-color:#80d5bb;background:#f2fffa}.feature-row small{grid-column:2;color:#7f7184;font-weight:700}.home-grid,.profile-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:18px}.home-grid.single{grid-template-columns:1fr}.learn-strip{position:relative;z-index:1;width:100%;border:0;border-radius:22px;margin:0 0 18px;padding:15px 18px;background:#fffdf7;color:#45304f;font-weight:950;box-shadow:0 12px 32px rgba(82,47,79,.08);cursor:pointer}.card{border:2px solid rgba(69,48,79,.11);border-radius:30px;background:rgba(255,255,255,.8);box-shadow:0 18px 45px rgba(82,47,79,.1);padding:22px}.section-title{display:flex;align-items:center;gap:10px;margin-bottom:18px}.section-title span{display:grid;place-items:center;width:34px;height:34px;border-radius:12px;background:#45304f;color:#fff7cf;font-weight:950}h2,h3{margin:0}.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}label{display:grid;gap:7px;margin-bottom:13px;color:#6d4b79;font-weight:850}label small{color:#ad7aa0;font-size:.78rem}input{width:100%;border:2px solid rgba(69,48,79,.14);border-radius:18px;padding:14px 15px;background:#fffaf1;color:#45304f;font:800 1rem Avenir Next,sans-serif;outline:none}.city-picker{position:relative}.city-menu{position:absolute;z-index:6;left:0;right:0;top:calc(100% - 4px);display:grid;gap:6px;max-height:265px;overflow:auto;padding:8px;border:2px solid rgba(69,48,79,.12);border-radius:18px;background:#fffdf6;box-shadow:0 20px 40px rgba(69,48,79,.18)}.city-menu button{display:grid;gap:2px;text-align:left;border:0;border-radius:13px;padding:10px 12px;background:transparent;color:#45304f}.city-menu button:hover{background:#fff0d6}.city-menu small,.location-note{color:rgba(69,48,79,.62);font-size:.78rem;font-weight:750}.primary-action,.soft-action{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;border:0;border-radius:22px;padding:15px 18px;color:#fff7cf;background:#45304f;box-shadow:0 9px 0 #2d1f35,0 20px 28px rgba(69,48,79,.18);font-weight:900;font-size:1rem;cursor:pointer}.soft-action{margin-top:16px;background:#f09d73;color:#45304f;box-shadow:0 8px 0 #c96d4c}.oracle-button{background:#80d5bb;box-shadow:0 8px 0 #56ad91}.active-feature{display:grid;place-items:center;text-align:center;align-content:center;background:linear-gradient(160deg,#f2f6ff,#fffdf7)}svg.big{width:150px;height:150px}.feature-row svg,.active-feature svg{fill:#fff2aa;stroke:#45304f;stroke-width:4}.feature-row svg path,.active-feature svg path{fill:#f09d73}.character-card{text-align:center}.natal-wheel{width:min(360px,100%);margin:0 auto 14px}.natal-wheel svg{width:100%;height:auto}.natal-wheel circle{fill:none;stroke:#45304f;stroke-width:2}.natal-wheel line{stroke:rgba(69,48,79,.28);stroke-width:1.5}.natal-wheel .aspect-line{stroke:#80d5bb;stroke-width:2;opacity:.9}.natal-wheel g circle{fill:#f4c15d;stroke:#45304f;stroke-width:2}.natal-wheel text{font-size:10px;text-anchor:middle;fill:#45304f;font-weight:900}.avatar{display:grid;place-items:center;width:118px;height:118px;margin:0 auto 12px;border-radius:34px;background:#fff0a8;color:#45304f;font-size:4rem}.dominant{display:inline-flex;margin:0 0 10px;padding:7px 12px;border-radius:999px;background:#f2e8f7;color:#6d4b79;font-weight:900;text-transform:uppercase}.meter{height:14px;border-radius:999px;background:rgba(69,48,79,.1);overflow:hidden}.meter span{display:block;height:100%;background:linear-gradient(90deg,#f09d73,#f4c15d,#80d5bb)}.chips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:13px}.chips span{border:2px solid rgba(69,48,79,.1);border-radius:999px;background:#fff0a8;padding:8px 11px;color:#5c3a65;font-size:.83rem;font-weight:850}.planet-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.planet-grid div{border-radius:18px;background:#f7f3ea;padding:12px}.aspect-list{margin-top:14px;border-radius:22px;background:#f6f3ed;padding:14px}.aspect-list p{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0;color:#5e5064;font-weight:760}.aspect-list small{color:#8b788f}.planet-grid strong{text-transform:capitalize;display:block}.planet-grid span,.planet-grid small{display:block;color:#75657a;font-weight:750}details{margin-top:12px;border-radius:18px;background:#f6f3ed;padding:12px}summary{cursor:pointer;font-weight:900}pre{max-height:220px;overflow:auto;white-space:pre-wrap;font-size:.8rem}.loading-screen{min-height:560px;display:grid;place-items:center;align-content:center;text-align:center;border-radius:32px;background:linear-gradient(135deg,rgba(255,240,168,.65),rgba(220,255,241,.78))}.loader{position:relative;width:180px;height:180px;display:grid;place-items:center}.loader:before{content:'';position:absolute;inset:18px;border:3px dashed rgba(69,48,79,.28);border-radius:50%;animation:spin 7s linear infinite}.loader span{position:absolute;width:28px;height:28px;border-radius:50%;background:#80d5bb;animation:float 1.7s ease-in-out infinite}.loader span:nth-child(1){left:18px;top:70px}.loader span:nth-child(2){right:22px;top:42px;background:#f4c15d}.loader span:nth-child(3){bottom:24px;right:54px;background:#f09d73}.loader strong{font-size:4rem;color:#45304f}.loading-screen .quote{min-height:34px;font-size:1.05rem;font-weight:900;color:#6d4b79;animation:fadeQuote 2.6s ease-in-out infinite}.loading-screen small{color:#7a6d7e;font-weight:760}.hermes-card{min-height:620px}.summary-card{display:grid;grid-template-columns:76px 1fr;gap:16px;align-items:start;border-radius:26px;background:linear-gradient(135deg,#fff0a8,#dcfff1);padding:18px}.summary-card svg{width:70px;fill:#fff2aa;stroke:#45304f;stroke-width:4}.summary-card svg path{fill:#f09d73}.summary-card p{margin:0;line-height:1.5;font-weight:780;color:rgba(69,48,79,.8)}.summary-card mark{background:linear-gradient(120deg,rgba(244,193,93,.55),rgba(128,213,187,.45));border-radius:10px;padding:2px 5px;color:#45304f}.summary-card span{color:#67566d}.insight-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}.insight{border-radius:22px;background:#fffdf7;border:1px solid rgba(69,48,79,.1);padding:14px}.insight div{display:flex;align-items:center;gap:8px}.insight div span{display:grid;place-items:center;width:34px;height:34px;border-radius:12px;background:#f2e8f7}.insight ul{margin:10px 0 0;padding-left:18px;color:#6a5a70;font-weight:720}.timeline{margin-top:14px;border-radius:24px;background:#f6f3ed;padding:16px}.timeline>div{display:grid;grid-template-columns:90px 1fr;gap:12px;border-top:1px solid rgba(69,48,79,.1);padding:10px 0}.timeline span{font-weight:950;color:#80623e}.timeline p{margin:0;color:#67566d;font-weight:720;line-height:1.45}.text-link{margin-top:12px;border:0;border-radius:999px;background:#45304f;color:#fff8df;padding:10px 14px;font-weight:900;cursor:pointer}.feedback{margin-top:14px;border-radius:24px;background:#fffdf7;border:1px solid rgba(69,48,79,.1);padding:16px}.stars{display:flex;gap:6px;margin:10px 0}.stars button{border:0;background:transparent;color:#c8b8cb;font-size:2rem;cursor:pointer}.stars button.active{color:#f4c15d}.feedback textarea{width:100%;min-height:78px;border:1px solid rgba(69,48,79,.14);border-radius:16px;padding:12px;font:inherit}.route-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}.learn-page,.register-page{position:relative;z-index:1}.education-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.education-grid button{border:1px solid rgba(69,48,79,.1);border-radius:24px;background:#fffdf7;padding:16px;text-align:left;color:#45304f;cursor:pointer;transition:transform .18s ease,border-color .18s ease}.education-grid button:hover,.education-grid button.active{transform:translateY(-2px);border-color:#80d5bb;background:#f2fffa}.education-grid svg,.education-detail svg{width:54px;height:54px;fill:#fff2aa;stroke:#45304f;stroke-width:4}.education-grid svg path,.education-detail svg path{fill:#f09d73}.education-grid p,.register-page p,.education-detail p{color:#6d6072;font-weight:720;line-height:1.5}.education-detail{display:grid;grid-template-columns:110px 1fr;gap:18px;align-items:center;margin-top:14px;border-radius:28px;background:linear-gradient(135deg,#fff0a8,#dcfff1);padding:20px}.education-detail svg{width:96px;height:96px}.ai-error-page{position:relative;z-index:1}.error-visual{display:grid;grid-template-columns:120px 1fr;gap:18px;align-items:center;border-radius:28px;background:linear-gradient(135deg,#fff0a8,#f8d8d8);padding:22px}.error-visual svg{width:100px;height:100px;fill:#fff2aa;stroke:#45304f;stroke-width:4}.error-visual svg path{fill:#f09d73}.error-visual p{font-weight:850;color:#6d4b79;line-height:1.5}footer{position:relative;z-index:1;padding:18px 0 0;text-align:center;color:rgba(69,48,79,.58);font-weight:780}.error{color:#b3264c;font-weight:850}@keyframes spin{to{transform:rotate(360deg)}}@keyframes float{50%{transform:translateY(-10px)}}@keyframes fadeQuote{0%,100%{opacity:.35;transform:translateY(4px)}35%,75%{opacity:1;transform:translateY(0)}}@media(max-width:860px){.app-shell{padding:8px}.phone-frame{padding:14px;border-radius:30px}.hero-card,.home-grid,.profile-grid,.insight-grid,.route-actions,.education-grid{grid-template-columns:1fr}.feature-row{grid-template-columns:1fr 1fr}.planet-grid{grid-template-columns:1fr 1fr}.hero-card svg{max-width:180px;order:-1;margin:auto}}@media(max-width:560px){.feature-row,.split,.planet-grid,.timeline>div,.education-detail,.error-visual{grid-template-columns:1fr}.summary-card{grid-template-columns:1fr}.topbar{flex-wrap:wrap}}
+.install-badge { display: none; width: 100%; margin: 14px 0; border: 0; border-radius: 24px; padding: 16px 18px; background: linear-gradient(135deg, #fff0a8, #cff7e8); color: var(--ink); font-weight: 950; box-shadow: 0 8px 0 rgba(47,36,55,.16); text-align: left; }
+.install-badge.show { display: grid; gap: 4px; }
+.install-badge small { color: var(--muted); font-weight: 800; }
+.field-hint { display: block; margin-top: 6px; color: var(--muted); font-size: .78rem; line-height: 1.35; }
+.history-strip { margin-top: 10px; background: linear-gradient(135deg, #fffdf7, #effbf6); }
+.share-action, .google-action { width: 100%; border: 0; border-radius: 999px; padding: 14px 18px; margin-top: 12px; background: #fffdf7; color: var(--ink); font-weight: 950; box-shadow: inset 0 0 0 2px rgba(47,36,55,.12), 0 6px 0 rgba(47,36,55,.12); }
+.google-action { background: linear-gradient(135deg, #fff, #eef5ff); }
+.bottom-nav { position: sticky; bottom: 12px; z-index: 20; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0 8px; padding: 8px; border: 1px solid rgba(47,36,55,.1); border-radius: 28px; background: rgba(255,253,247,.86); backdrop-filter: blur(14px); box-shadow: 0 18px 44px rgba(47,36,55,.16); }
+.bottom-nav button { border: 0; border-radius: 20px; padding: 10px 6px; background: transparent; color: var(--muted); font-weight: 950; display: grid; gap: 2px; place-items: center; }
+.bottom-nav button.active { background: #4b3155; color: #fff8df; }
+.bottom-nav span { font-size: .72rem; }
+.history-list { display: grid; gap: 12px; }
+.history-list button { border: 1px solid rgba(47,36,55,.12); border-radius: 22px; padding: 16px; background: #fffdf7; color: var(--ink); text-align: left; display: grid; gap: 4px; }
+.history-list span, .history-list small { color: var(--muted); font-weight: 800; }
+.detail-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 14px 0; }
+.detail-list article { border-radius: 20px; padding: 14px; background: rgba(255,253,247,.72); border: 1px solid rgba(47,36,55,.1); }
+.detail-list p { margin: 6px 0 0; color: var(--muted); font-weight: 800; }
+.education-grid button small { color: var(--accent); font-weight: 950; }
+.chat-page textarea { width: 100%; min-height: 130px; border-radius: 22px; border: 1px solid rgba(47,36,55,.14); padding: 16px; font: inherit; box-sizing: border-box; }
+.detail-answer { margin-top: 14px; display: grid; grid-template-columns: 58px 1fr; gap: 12px; align-items: start; border-radius: 24px; padding: 16px; background: linear-gradient(135deg, #fff6aa, #c9f7ed); }
+.detail-answer p { margin: 0; line-height: 1.55; }
+.insight li strong { color: var(--ink); background: linear-gradient(180deg, transparent 55%, rgba(244,193,93,.35) 0); }
+@media (max-width: 720px) { .bottom-nav { position: fixed; left: 14px; right: 14px; bottom: 10px; } .phone-frame { padding-bottom: 104px; } }
 </style>

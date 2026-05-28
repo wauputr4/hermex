@@ -9,11 +9,14 @@ Hermex turns birth context into a natal chart, shows readable astrology signals,
 ## MVP highlights
 
 - Mobile-first SvelteKit interface with installable-app feel.
+- PWA manifest and service worker so Hermex can be installed from the browser.
+- Guest-first local storage for draft birth data and local guest chart history.
 - Searchable birth-city picker with latitude, longitude, and timezone metadata.
 - Swiss Ephemeris natal chart calculation with Placidus houses when birth time and coordinates are available.
 - SVG natal-wheel visualization, planet cards, and aspect list.
 - Interactive astrology education page for planets, zodiac signs, houses, and aspects.
 - AI interpretation page with highlighted summary, focused insight cards, roadmap, and user feedback.
+- Bottom navigation for Profile, Connect/share, and Hermex AI detail questions.
 - Local admin dashboard for guest history, prompt inspection, prompt editing, and AI provider configuration.
 - OpenAI-compatible provider support with custom base URL, API key, model, temperature, max tokens, and model sync from `/models`.
 

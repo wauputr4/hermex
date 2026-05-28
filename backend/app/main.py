@@ -94,6 +94,12 @@ class InterpretationInput(BaseModel):
     language: str = Field(default="id", pattern="^(id|en)$")
 
 
+class DetailedQuestionInput(BaseModel):
+    profile_id: str
+    language: str = Field(default="id", pattern="^(id|en)$")
+    question: str = Field(min_length=4, max_length=700)
+
+
 class LLMConfigInput(BaseModel):
     provider: str = Field(default="openai_compat", max_length=80)
     base_url: str | None = Field(default=None, max_length=300)
@@ -106,6 +112,14 @@ class LLMConfigInput(BaseModel):
 class LLMModelSyncInput(BaseModel):
     base_url: str | None = Field(default=None, max_length=300)
     api_key: str | None = Field(default=None, max_length=500)
+
+
+class FeedbackInput(BaseModel):
+    profile_id: str | None = Field(default=None, max_length=80)
+    interpretation_id: str | None = Field(default=None, max_length=80)
+    rating: int = Field(ge=1, le=5)
+    message: str | None = Field(default=None, max_length=1200)
+    source: str = Field(default="web", max_length=40)
 
 
 class QuestStartInput(BaseModel):
@@ -189,6 +203,19 @@ def init_db() -> None:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS feedback (
+                id TEXT PRIMARY KEY,
+                profile_id TEXT,
+                interpretation_id TEXT,
+                rating INTEGER NOT NULL,
+                message TEXT,
+                source TEXT NOT NULL,
+                created_at TEXT NOT NULL
             )
             """
         )
@@ -634,7 +661,7 @@ def parse_sse_chat_content(text: str) -> str:
     return "".join(chunks).strip()
 
 
-async def call_llm(profile: dict[str, Any], language: str = "id") -> dict[str, Any]:
+async def call_llm(profile: dict[str, Any], language: str = "id", question: str | None = None) -> dict[str, Any]:
     config = get_llm_config()
     provider = config["provider"]
     base_url = config["base_url"]
@@ -658,6 +685,7 @@ async def call_llm(profile: dict[str, Any], language: str = "id") -> dict[str, A
         "traits": profile["traits"],
         "roadmap_preview": profile["roadmap_preview"],
         "validation": profile.get("validation", {}),
+        "detail_question": question,
     }
     language_name = "Indonesian" if language == "id" else "English"
     system_prompt_template = get_setting(
@@ -857,6 +885,11 @@ def validate_birth(payload: ValidationInput) -> dict[str, Any]:
     }
 
 
+@app.get("/api/v1/profiles/{profile_id}")
+def get_profile(profile_id: str) -> dict[str, Any]:
+    return load_profile(profile_id)
+
+
 @app.post("/api/v1/interpretation")
 async def interpretation(payload: InterpretationInput) -> dict[str, Any]:
     profile = load_profile(payload.profile_id)
@@ -887,6 +920,61 @@ async def interpretation(payload: InterpretationInput) -> dict[str, Any]:
         "interpretation": llm_result["response"],
         "confidence": profile["traits"]["confidence"],
     }
+
+
+@app.post("/api/v1/interpretation/ask")
+async def ask_interpretation_detail(payload: DetailedQuestionInput) -> dict[str, Any]:
+    profile = load_profile(payload.profile_id)
+    llm_result = await call_llm(profile, language=payload.language, question=payload.question)
+    interpretation_id = str(uuid.uuid4())
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO interpretations (id, profile_id, provider, model, prompt_hash, request_payload_json, response_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                interpretation_id,
+                profile["profile_id"],
+                llm_result["provider"],
+                llm_result["model"],
+                llm_result["prompt_hash"],
+                json.dumps(llm_result["request_payload"]),
+                json.dumps(llm_result["response"]),
+                now_iso(),
+            ),
+        )
+    return {
+        "profile_id": profile["profile_id"],
+        "interpretation_id": interpretation_id,
+        "provider": llm_result["provider"],
+        "model": llm_result["model"],
+        "question": payload.question,
+        "interpretation": llm_result["response"],
+        "confidence": profile["traits"]["confidence"],
+    }
+
+
+@app.post("/api/v1/feedback")
+def submit_feedback(payload: FeedbackInput) -> dict[str, Any]:
+    feedback_id = str(uuid.uuid4())
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO feedback (id, profile_id, interpretation_id, rating, message, source, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                feedback_id,
+                payload.profile_id,
+                payload.interpretation_id,
+                payload.rating,
+                payload.message,
+                payload.source,
+                now_iso(),
+            ),
+        )
+    return {"status": "ok", "feedback_id": feedback_id}
 
 
 @app.get("/admin/login", response_class=HTMLResponse)
@@ -981,6 +1069,31 @@ def guest_history(limit: int = 50, _admin: bool = Depends(require_admin)) -> dic
     return {"guests": guests}
 
 
+def admin_feedback_history(limit: int = 80) -> list[dict[str, Any]]:
+    limit = min(max(limit, 1), 200)
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                f.id,
+                f.profile_id,
+                f.interpretation_id,
+                f.rating,
+                f.message,
+                f.source,
+                f.created_at,
+                p.display_name,
+                p.birth_place
+            FROM feedback f
+            LEFT JOIN profiles p ON p.id = f.profile_id
+            ORDER BY f.created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 @app.post("/api/v1/admin/prompt")
 async def update_admin_prompt(request: Request, _admin: bool = Depends(require_admin)) -> dict[str, Any]:
     body = await request.json()
@@ -1054,6 +1167,8 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
         f'<option value="{html.escape(value)}" {"selected" if llm_config["provider"] == value else ""}>{html.escape(label)}</option>'
         for value, label in provider_options.items()
     )
+    feedback_rows = admin_feedback_history()
+    average_rating = round(sum(row["rating"] for row in feedback_rows) / len(feedback_rows), 2) if feedback_rows else 0
     cards = []
     for guest in data["guests"]:
         latest = guest.get("latest_interpretation")
@@ -1083,6 +1198,24 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
                 <summary>Latest AI response</summary>
                 <pre>{html.escape(response)}</pre>
               </details>
+            </article>
+            """
+        )
+    feedback_cards = []
+    for item in feedback_rows:
+        stars = "★" * int(item["rating"]) + "☆" * (5 - int(item["rating"]))
+        feedback_cards.append(
+            f"""
+            <article class="guest-card feedback-card">
+              <div class="guest-head">
+                <div>
+                  <p class="eyebrow">{html.escape(item["created_at"])}</p>
+                  <h2>{html.escape(item.get("display_name") or "Anonymous guest")}</h2>
+                </div>
+                <span>{html.escape(stars)}</span>
+              </div>
+              <p>{html.escape(item.get("message") or "No written feedback.")}</p>
+              <small>{html.escape(item.get("birth_place") or "-")} · {html.escape(item.get("source") or "web")}</small>
             </article>
             """
         )
@@ -1118,6 +1251,15 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
           .inline-actions label {{ flex: 1; }}
           .inline-actions button {{ width: auto; white-space: nowrap; }}
           .hint {{ color: #806d83; font-size: .88rem; }}
+          .admin-menu {{ display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; }}
+          .admin-menu button {{ width: auto; margin: 0; background: #fffdf7; color: #2f2437; border: 1px solid rgba(47,36,55,.12); }}
+          .admin-menu button.active {{ background: #2f2437; color: #fff8df; }}
+          .dashboard-panel {{ display: none; }}
+          .dashboard-panel.active {{ display: block; }}
+          .overview-grid {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }}
+          .stat-card {{ border-radius: 20px; background: #fffdf7; padding: 18px; border: 1px solid rgba(47,36,55,.12); box-shadow: 0 14px 40px rgba(47,36,55,.07); }}
+          .stat-card strong {{ display: block; font-size: 2rem; letter-spacing: -.04em; }}
+          .feedback-card p {{ font-size: 1rem; line-height: 1.55; }}
           .guest-head {{ display: flex; justify-content: space-between; gap: 14px; align-items: start; }}
           h2 {{ margin: 0; }}
           .guest-head span {{ border-radius: 999px; background: #e6f5ef; padding: 8px 12px; font-weight: 800; }}
@@ -1127,7 +1269,7 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
           details {{ margin-top: 10px; border-radius: 16px; background: #f8f3e7; padding: 12px; }}
           summary {{ cursor: pointer; font-weight: 900; }}
           pre {{ white-space: pre-wrap; overflow: auto; font-size: .82rem; line-height: 1.45; }}
-          @media (max-width: 760px) {{ header, .guest-head, .inline-actions {{ display: block; }} dl, .control-grid {{ grid-template-columns: 1fr; }} }}
+          @media (max-width: 760px) {{ header, .guest-head, .inline-actions {{ display: block; }} dl, .control-grid, .overview-grid {{ grid-template-columns: 1fr; }} }}
         </style>
       </head>
       <body>
@@ -1139,15 +1281,33 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
             </div>
             <p>{len(data["guests"])} guest records</p>
           </header>
-          <section class="prompt-editor">
+          <nav class="admin-menu" aria-label="Admin menu">
+            <button class="active" data-target="overview" type="button">Overview</button>
+            <button data-target="provider" type="button">Provider</button>
+            <button data-target="prompt" type="button">Setting prompt</button>
+            <button data-target="feedback" type="button">Feedback</button>
+            <button data-target="logs" type="button">Log</button>
+          </nav>
+          <section class="dashboard-panel active" data-panel="overview">
+            <div class="overview-grid">
+              <article class="stat-card"><span>Guest records</span><strong>{len(data["guests"])}</strong></article>
+              <article class="stat-card"><span>Feedback</span><strong>{len(feedback_rows)}</strong></article>
+              <article class="stat-card"><span>Average rating</span><strong>{average_rating}</strong></article>
+              <article class="stat-card"><span>AI provider</span><strong>{html.escape(llm_config["provider"])}</strong></article>
+            </div>
+          </section>
+          <section class="dashboard-panel" data-panel="prompt">
+          <div class="prompt-editor">
             <p class="eyebrow">Hermes AI prompt</p>
             <h2>Editable system prompt</h2>
             <p>Use <code>{{language}}</code> where the active UI language should be inserted.</p>
             <textarea id="prompt">{html.escape(current_prompt)}</textarea>
             <button id="savePrompt">Save prompt</button>
             <span id="saveStatus"></span>
+          </div>
           </section>
-          <section class="provider-editor">
+          <section class="dashboard-panel" data-panel="provider">
+          <div class="provider-editor">
             <p class="eyebrow">Hermes AI provider</p>
             <h2>Provider, endpoint, API key, and model</h2>
             <p class="hint">Use an OpenAI-compatible endpoint. API keys are saved only in local SQLite settings and are never printed back here.</p>
@@ -1176,10 +1336,25 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
             </div>
             <button id="saveProvider">Save AI provider</button>
             <span id="providerStatus"></span>
+          </div>
           </section>
-          {''.join(cards) or '<p>No guests yet.</p>'}
+          <section class="dashboard-panel" data-panel="feedback">
+            {''.join(feedback_cards) or '<p>No feedback yet.</p>'}
+          </section>
+          <section class="dashboard-panel" data-panel="logs">
+            {''.join(cards) or '<p>No guests yet.</p>'}
+          </section>
         </main>
         <script>
+          document.querySelectorAll('.admin-menu button').forEach((button) => {{
+            button.addEventListener('click', () => {{
+              document.querySelectorAll('.admin-menu button').forEach((item) => item.classList.remove('active'));
+              document.querySelectorAll('.dashboard-panel').forEach((panel) => panel.classList.remove('active'));
+              button.classList.add('active');
+              document.querySelector(`[data-panel="${{button.dataset.target}}"]`).classList.add('active');
+            }});
+          }});
+
           const initialConfig = {llm_config_json};
           const provider = document.getElementById('provider');
           const baseUrl = document.getElementById('baseUrl');

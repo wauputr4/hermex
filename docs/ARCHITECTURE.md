@@ -6,7 +6,7 @@ Hermex is organized into two main services:
 
 - **Frontend (SvelteKit + SVG/CSS interaction)**
   - Handles birth form, profile summary screens, astrology education, and installable-app style UI.
-  - Manages local UI state and calls backend APIs.
+  - Manages local UI state, guest draft/history storage, PWA install prompt, and backend API calls.
 - **Backend (FastAPI + SQLite)**
   - Handles data validation, astrology computation, questionnaire scoring, and LLM orchestration.
   - Stores profiles, sessions, quests, and interpretation history.
@@ -95,6 +95,14 @@ Response:
 ### `POST /api/v1/interpretation`
 - Input: `profile_id`, `language`.
 - Response: `interpretation` object from LLM, source metadata, and confidence level.
+
+### `POST /api/v1/interpretation/ask`
+- Input: `profile_id`, `language`, `question`.
+- Response: detailed Hermes AI answer based on the saved chart payload.
+
+### `POST /api/v1/feedback`
+- Input: `profile_id`, `interpretation_id`, `rating`, optional message.
+- Response: saved feedback id.
 
 ### `GET /api/v1/admin/guest-history`
 - Admin-only guest history with prompt payload and latest AI response.
