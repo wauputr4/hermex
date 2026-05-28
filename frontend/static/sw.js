@@ -1,5 +1,5 @@
-const CACHE_NAME = 'hermex-quest-v2';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/hermex-star.svg'];
+const CACHE_NAME = 'hermex-quest-v3';
+const APP_SHELL = ['/', '/offline.html', '/manifest.webmanifest', '/icons/hermex-star.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -31,7 +31,11 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => cached || caches.match('/'));
+        .catch(() => {
+          if (cached) return cached;
+          if (request.mode === 'navigate') return caches.match('/offline.html');
+          return caches.match('/');
+        });
       return cached || network;
     })
   );

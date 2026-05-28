@@ -11,6 +11,10 @@ export type BirthPayload = {
 };
 
 export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('Hermex is offline. Saved guest history and education are still available.');
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -25,6 +29,10 @@ export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('Hermex is offline. Saved guest history and education are still available.');
+  }
+
   const response = await fetch(`${API_BASE}${path}`);
 
   if (!response.ok) {

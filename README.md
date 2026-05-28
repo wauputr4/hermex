@@ -14,15 +14,19 @@ Hermex turns birth context into a natal chart, shows readable astrology signals,
 
 - Mobile-first SvelteKit interface with installable-app feel.
 - PWA manifest and service worker so Hermex can be installed from the browser.
+- Offline PWA fallback page plus in-app offline mode for saved guest history and education.
 - Guest-first local storage for draft birth data and local guest chart history.
+- Local guest game progress with XP, streak, and badge storage.
 - Searchable birth-city picker with latitude, longitude, and timezone metadata.
 - Swiss Ephemeris natal chart calculation with Placidus houses when birth time and coordinates are available.
-- SVG natal-wheel visualization, planet cards, and aspect list.
+- SVG natal-wheel visualization, expanded planet cards, and aspect list.
 - Interactive astrology education page for planets, zodiac signs, houses, and aspects.
+- Google OAuth terms page placeholder for hosted account login.
 - AI interpretation page with highlighted summary, focused insight cards, roadmap, and user feedback.
 - Bottom navigation for Profile, Connect/share, and Hermex AI detail questions.
-- Local admin dashboard for guest history, prompt inspection, prompt editing, and AI provider configuration.
+- Local admin dashboard for overview, guest history, feedback, logs, prompt editing, and AI provider configuration.
 - OpenAI-compatible provider support with custom base URL, API key, model, temperature, max tokens, and model sync from `/models`.
+- Admin-controlled AI usage limits for requests per minute, requests per day, and max tokens.
 
 ## Stack
 
@@ -101,6 +105,8 @@ LLM_API_KEY=your_api_key
 LLM_MODEL=gpt-4o-mini
 LLM_TEMPERATURE=0.4
 LLM_MAX_TOKENS=700
+LLM_REQUESTS_PER_MINUTE=6
+LLM_REQUESTS_PER_DAY=40
 
 SQLITE_URL=sqlite:///./hermex.db
 CORS_ORIGINS=http://localhost:18173,http://127.0.0.1:18173
@@ -146,13 +152,18 @@ The dashboard supports:
 - Custom OpenAI-compatible endpoint.
 - API key input.
 - Model sync from the configured endpoint's `/models` route.
+- Usage limits for AI requests per minute, AI requests per day, and max tokens.
+- Feedback and log menus with guest export for local auditing.
 
 ## API overview
 
 - `GET /api/v1/health`
 - `POST /api/v1/birth/analyze`
 - `POST /api/v1/birth/validate`
+- `GET /api/v1/profiles/{profile_id}`
 - `POST /api/v1/interpretation`
+- `POST /api/v1/interpretation/ask`
+- `POST /api/v1/feedback`
 - `POST /api/v1/quests/start`
 - `POST /api/v1/quests/complete`
 - `GET /api/v1/roadmap/{profile_id}`

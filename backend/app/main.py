@@ -9,7 +9,7 @@ import sqlite3
 import urllib.parse
 import uuid
 from contextlib import contextmanager
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -36,6 +36,7 @@ if not DB_PATH.is_absolute():
     DB_PATH = Path.cwd() / DB_PATH
 
 security = HTTPBasic()
+RATE_LIMIT_BUCKETS: dict[str, list[datetime]] = {}
 
 DEFAULT_SYSTEM_PROMPT = """
 Anda adalah Hermes, seorang ahli astrologi modern dan mentor reflektif.
@@ -108,6 +109,8 @@ class LLMConfigInput(BaseModel):
     model: str | None = Field(default=None, max_length=160)
     temperature: float | None = Field(default=None, ge=0, le=2)
     max_tokens: int | None = Field(default=None, ge=128, le=4000)
+    requests_per_minute: int | None = Field(default=None, ge=1, le=300)
+    requests_per_day: int | None = Field(default=None, ge=1, le=10000)
 
 
 class LLMModelSyncInput(BaseModel):
@@ -344,6 +347,8 @@ def get_llm_config() -> dict[str, Any]:
         "model": get_setting("llm_model", os.getenv("LLM_MODEL", "gpt-4o-mini")).strip() or "gpt-4o-mini",
         "temperature": setting_float("llm_temperature", "LLM_TEMPERATURE", "0.4"),
         "max_tokens": setting_int("llm_max_tokens", "LLM_MAX_TOKENS", "700"),
+        "requests_per_minute": setting_int("llm_requests_per_minute", "LLM_REQUESTS_PER_MINUTE", "6"),
+        "requests_per_day": setting_int("llm_requests_per_day", "LLM_REQUESTS_PER_DAY", "40"),
     }
 
 
@@ -355,8 +360,33 @@ def public_llm_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
         "model": config["model"],
         "temperature": config["temperature"],
         "max_tokens": config["max_tokens"],
+        "requests_per_minute": config["requests_per_minute"],
+        "requests_per_day": config["requests_per_day"],
         "has_api_key": bool(config["api_key"]),
     }
+
+
+def enforce_ai_rate_limit(request: Request, profile_id: str | None = None) -> None:
+    config = get_llm_config()
+    minute_limit = max(1, int(config["requests_per_minute"]))
+    day_limit = max(1, int(config["requests_per_day"]))
+    now = datetime.now(timezone.utc)
+    client_host = request.client.host if request.client else "unknown"
+    key = f"{client_host}:{profile_id or 'guest'}"
+    events = RATE_LIMIT_BUCKETS.setdefault(key, [])
+    events[:] = [event_time for event_time in events if now - event_time < timedelta(days=1)]
+    minute_events = [event_time for event_time in events if now - event_time < timedelta(minutes=1)]
+    if len(minute_events) >= minute_limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"AI request limit reached: max {minute_limit} request(s) per minute.",
+        )
+    if len(events) >= day_limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"AI request limit reached: max {day_limit} request(s) per day.",
+        )
+    events.append(now)
 
 
 def now_iso() -> str:
@@ -401,14 +431,26 @@ def compute_chart(payload: BirthProfileInput) -> dict[str, Any]:
             "mars": swe.MARS,
             "jupiter": swe.JUPITER,
             "saturn": swe.SATURN,
+            "uranus": swe.URANUS,
+            "neptune": swe.NEPTUNE,
+            "pluto": swe.PLUTO,
         }
+        optional_planets = {
+            "true_node": getattr(swe, "TRUE_NODE", None),
+            "chiron": getattr(swe, "CHIRON", None),
+            "lilith": getattr(swe, "MEAN_APOG", None),
+        }
+        planet_ids.update({name: planet_id for name, planet_id in optional_planets.items() if planet_id is not None})
         for name, planet_id in planet_ids.items():
-            result, _flags = swe.calc_ut(jd, planet_id)
+            try:
+                result, _flags = swe.calc_ut(jd, planet_id)
+            except Exception:
+                continue
             planets[name] = {"longitude": round(float(result[0]) % 360, 3)}
     else:
         seed = chart_seed(payload)
         location_offset = ((payload.longitude or 0) * 0.37 + (payload.latitude or 0) * 0.19) % 360
-        for idx, name in enumerate(["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn"]):
+        for idx, name in enumerate(["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto", "true_node", "chiron", "lilith"]):
             planets[name] = {"longitude": round(((seed / (idx + 3)) + idx * 37 + location_offset) % 360, 3)}
 
     for planet in planets.values():
@@ -470,7 +512,7 @@ def build_aspects(planets: dict[str, dict[str, float]]) -> list[dict[str, Any]]:
                 orb = abs(diff - angle)
                 if orb <= 6:
                     aspects.append({"left": left, "right": right, "type": aspect_name, "orb": round(orb, 2)})
-    return aspects[:8]
+    return aspects[:16]
 
 
 def zodiac_position(longitude: float) -> dict[str, Any]:
@@ -893,8 +935,9 @@ def get_profile(profile_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/v1/interpretation")
-async def interpretation(payload: InterpretationInput) -> dict[str, Any]:
+async def interpretation(payload: InterpretationInput, request: Request) -> dict[str, Any]:
     profile = load_profile(payload.profile_id)
+    enforce_ai_rate_limit(request, profile["profile_id"])
     llm_result = await call_llm(profile, language=payload.language)
     interpretation_id = str(uuid.uuid4())
     with db() as conn:
@@ -925,8 +968,9 @@ async def interpretation(payload: InterpretationInput) -> dict[str, Any]:
 
 
 @app.post("/api/v1/interpretation/ask")
-async def ask_interpretation_detail(payload: DetailedQuestionInput) -> dict[str, Any]:
+async def ask_interpretation_detail(payload: DetailedQuestionInput, request: Request) -> dict[str, Any]:
     profile = load_profile(payload.profile_id)
+    enforce_ai_rate_limit(request, profile["profile_id"])
     llm_result = await call_llm(profile, language=payload.language, question=payload.question)
     interpretation_id = str(uuid.uuid4())
     with db() as conn:
@@ -1121,6 +1165,10 @@ async def update_admin_llm_config(payload: LLMConfigInput, _admin: bool = Depend
         set_setting("llm_temperature", str(payload.temperature))
     if payload.max_tokens is not None:
         set_setting("llm_max_tokens", str(payload.max_tokens))
+    if payload.requests_per_minute is not None:
+        set_setting("llm_requests_per_minute", str(payload.requests_per_minute))
+    if payload.requests_per_day is not None:
+        set_setting("llm_requests_per_day", str(payload.requests_per_day))
     return {"status": "ok", "config": public_llm_config()}
 
 
@@ -1161,6 +1209,7 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
     current_prompt = get_setting("llm_system_prompt", os.getenv("LLM_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT))
     llm_config = public_llm_config()
     llm_config_json = json.dumps(llm_config)
+    guest_payload_json = json.dumps(data["guests"], ensure_ascii=False).replace("</", "<\\/")
     provider_options = {
         "openai_compat": "OpenAI-compatible endpoint",
         "local_fallback": "Local fallback only",
@@ -1261,6 +1310,9 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
           .overview-grid {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }}
           .stat-card {{ border-radius: 20px; background: #fffdf7; padding: 18px; border: 1px solid rgba(47,36,55,.12); box-shadow: 0 14px 40px rgba(47,36,55,.07); }}
           .stat-card strong {{ display: block; font-size: 2rem; letter-spacing: -.04em; }}
+          .admin-toolbar {{ display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }}
+          .admin-toolbar input {{ flex: 1; }}
+          .admin-toolbar button {{ margin: 0; white-space: nowrap; }}
           .feedback-card p {{ font-size: 1rem; line-height: 1.55; }}
           .guest-head {{ display: flex; justify-content: space-between; gap: 14px; align-items: start; }}
           h2 {{ margin: 0; }}
@@ -1296,6 +1348,8 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
               <article class="stat-card"><span>Feedback</span><strong>{len(feedback_rows)}</strong></article>
               <article class="stat-card"><span>Average rating</span><strong>{average_rating}</strong></article>
               <article class="stat-card"><span>AI provider</span><strong>{html.escape(llm_config["provider"])}</strong></article>
+              <article class="stat-card"><span>AI / minute</span><strong>{llm_config["requests_per_minute"]}</strong></article>
+              <article class="stat-card"><span>AI / day</span><strong>{llm_config["requests_per_day"]}</strong></article>
             </div>
           </section>
           <section class="dashboard-panel" data-panel="prompt">
@@ -1329,6 +1383,12 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
               <label>Max tokens
                 <input id="maxTokens" type="number" min="128" max="4000" step="1" value="{llm_config["max_tokens"]}" />
               </label>
+              <label>Requests / minute
+                <input id="requestsPerMinute" type="number" min="1" max="300" step="1" value="{llm_config["requests_per_minute"]}" />
+              </label>
+              <label>Requests / day
+                <input id="requestsPerDay" type="number" min="1" max="10000" step="1" value="{llm_config["requests_per_day"]}" />
+              </label>
             </div>
             <div class="inline-actions">
               <label>Model
@@ -1344,6 +1404,10 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
             {''.join(feedback_cards) or '<p>No feedback yet.</p>'}
           </section>
           <section class="dashboard-panel" data-panel="logs">
+            <div class="admin-toolbar">
+              <input id="logSearch" placeholder="Search guest, city, provider, model..." />
+              <button id="exportGuests" type="button">Export JSON</button>
+            </div>
             {''.join(cards) or '<p>No guests yet.</p>'}
           </section>
         </main>
@@ -1364,7 +1428,10 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
           const modelSelect = document.getElementById('modelSelect');
           const temperature = document.getElementById('temperature');
           const maxTokens = document.getElementById('maxTokens');
+          const requestsPerMinute = document.getElementById('requestsPerMinute');
+          const requestsPerDay = document.getElementById('requestsPerDay');
           const providerStatus = document.getElementById('providerStatus');
+          const guestPayload = {guest_payload_json};
 
           function setModels(models, selected) {{
             const unique = Array.from(new Set([selected, ...models].filter(Boolean)));
@@ -1400,7 +1467,9 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
                 api_key: apiKey.value,
                 model: modelSelect.value,
                 temperature: Number(temperature.value),
-                max_tokens: Number(maxTokens.value)
+                max_tokens: Number(maxTokens.value),
+                requests_per_minute: Number(requestsPerMinute.value),
+                requests_per_day: Number(requestsPerDay.value)
               }})
             }});
             providerStatus.textContent = response.ok ? 'Provider saved' : await response.text();
@@ -1417,6 +1486,23 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
               body: JSON.stringify({{ prompt }})
             }});
             status.textContent = response.ok ? 'Saved' : await response.text();
+          }});
+
+          document.getElementById('logSearch')?.addEventListener('input', (event) => {{
+            const query = event.target.value.toLowerCase();
+            document.querySelectorAll('[data-panel="logs"] .guest-card').forEach((card) => {{
+              card.style.display = card.textContent.toLowerCase().includes(query) ? '' : 'none';
+            }});
+          }});
+
+          document.getElementById('exportGuests')?.addEventListener('click', () => {{
+            const blob = new Blob([JSON.stringify(guestPayload, null, 2)], {{ type: 'application/json' }});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `hermex-guests-${{new Date().toISOString().slice(0, 10)}}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
           }});
         </script>
       </body>
