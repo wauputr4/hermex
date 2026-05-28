@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { API_BASE, analyzeBirth, askHermexDetail, getProfile, interpretProfile, submitFeedback as submitFeedbackApi, validateBirth } from '$lib/api/hermex';
+  import { API_BASE, analyzeBirth, askHermexDetail, getAuthMe, getProfile, interpretProfile, submitFeedback as submitFeedbackApi, validateBirth } from '$lib/api/hermex';
 
   type Lang = 'id' | 'en';
-  type Screen = 'home' | 'profile' | 'hermes-loading' | 'hermes' | 'learn' | 'learn-detail' | 'register' | 'terms' | 'history' | 'connect' | 'hermes-chat' | 'ai-error';
+  type Screen = 'home' | 'account' | 'profile' | 'hermes-loading' | 'hermes' | 'learn' | 'learn-detail' | 'register' | 'terms' | 'history' | 'connect' | 'hermes-chat' | 'ai-error';
   type GuestHistoryItem = { profile_id: string; display_name?: string; birth_place: string; created_at: string; dominant: string; profile: any };
   type GuestGameState = { xp: number; streak: number; badges: string[]; dailyQuestDate?: string };
+  type AuthUser = { name?: string; email?: string; picture?: string };
 
   const t = {
     id: {
@@ -13,22 +14,22 @@
       subtitle: 'Masukkan data lahir, lihat chart kosmik, lalu minta Hermes membaca pola umum untuk refleksi diri.',
       name: 'Nama atau username', optional: 'opsional', date: 'Tanggal lahir', time: 'Jam lahir', place: 'Tempat lahir', citySearch: 'Cari kota lahir',
       analyze: 'Buka Astrologyku', analyzing: 'Membuka chart...', edit: 'Edit data', language: 'Bahasa', selectedCity: 'Kota terpilih',
-      locationHint: 'Lat/lon dan zona waktu ikut memengaruhi chart.', features: 'Yang bisa dicoba', profile: 'Kartu Karakter', chart: 'Chart Explorer', install: 'Install Hermex', installHint: 'Biar chart dan history guest tetap mudah dibuka lagi.', history: 'History', connect: 'Connect', hermexNav: 'Hermex AI', offlineTitle: 'Mode offline aktif', offlineBody: 'Kamu tetap bisa membuka draft, history, dan edukasi yang tersimpan. AI aktif lagi saat internet kembali.', onlineTitle: 'Terhubung',
+      locationHint: 'Lat/lon dan zona waktu ikut memengaruhi chart.', features: 'Yang bisa dicoba', profile: 'Kartu Karakter', profileTab: 'Profile', chart: 'Chart Explorer', install: 'Install Hermex', installHint: 'Biar chart dan history guest tetap mudah dibuka lagi.', history: 'History', connect: 'Connect', hermexNav: 'Hermex AI', offlineTitle: 'Mode offline aktif', offlineBody: 'Kamu tetap bisa membuka draft, history, dan edukasi yang tersimpan. AI aktif lagi saat internet kembali.', onlineTitle: 'Terhubung',
       askHermes: 'Analisis Kosmik Saya', validating: 'Kunci kepastian', validate: 'Jawab validasi cepat', processingTitle: 'Hermes sedang membaca chart',
       processingBody: 'Menggabungkan posisi planet, zodiac, house, aspect, dan bahasa yang kamu pilih.', hermes: 'Analisis Kosmik Saya', summary: 'Ringkasan',
       strengths: 'Kekuatan', weaknesses: 'Kelemahan', love: 'Percintaan', interests: 'Minat', talents: 'Bakat', career: 'Arah Karier', fiveYear: 'Roadmap 5 tahun terakhir',
-      back: 'Kembali ke chart', askAgain: 'Tanya ulang Hermes', learn: 'Belajar Astrology', register: 'Daftar untuk penjelasan lengkap', feedback: 'Seberapa cocok hasilnya?', suggestion: 'Saran dan masukan (opsional)', sendFeedback: 'Kirim feedback', share: 'Share profil guest', copied: 'Link tersalin', registerTitle: 'Daftar untuk membaca detail lengkap', registerBody: 'Masuk untuk menyimpan progres lintas perangkat. Untuk MVP, Google login masih berupa opsi tampilan.', googleLogin: 'Lanjut dengan Google', email: 'Email', aiErrorTitle: 'Gagal menghubungkan AI Hermex', aiErrorBody: 'Hermes belum bisa terhubung ke provider AI. Chart kamu tetap aman; coba lagi sebentar lagi atau kembali ke chart.', retry: 'Coba lagi', historyTitle: 'History Guest', emptyHistory: 'Belum ada history di perangkat ini.', askDetail: 'Tanya detail ke Hermex', askPlaceholder: 'Contoh: kenapa karier saya condong ke edukasi?', dailyQuest: 'Daily Cosmic Quest', dailyQuestBody: 'Claim refleksi harian untuk menyimpan streak guest dan badge lokal.', claimBadge: 'Claim badge hari ini', claimedBadge: 'Quest hari ini selesai', xp: 'XP', badges: 'Badge', termsTitle: 'Syarat Google OAuth', termsIntro: 'Sebelum lanjut Google login, pahami dulu cara Hermex memakai data dan batas MVP open-source ini.', termsAccept: 'Saya setuju dan lanjut', termsBack: 'Baca nanti', ethics: 'Untuk refleksi dan pengembangan diri, bukan ramalan mutlak.'
+      back: 'Kembali ke chart', askAgain: 'Tanya ulang Hermes', learn: 'Belajar Astrology', register: 'Daftar untuk penjelasan lengkap', feedback: 'Seberapa cocok hasilnya?', suggestion: 'Saran dan masukan (opsional)', sendFeedback: 'Kirim feedback', share: 'Share profil guest', copied: 'Link tersalin', registerTitle: 'Daftar untuk membaca detail lengkap', registerBody: 'Masuk untuk menyimpan progres lintas perangkat. Untuk MVP, Google login masih berupa opsi tampilan.', googleLogin: 'Lanjut dengan Google', email: 'Email', aiErrorTitle: 'Gagal menghubungkan AI Hermex', aiErrorBody: 'Hermes belum bisa terhubung ke provider AI. Chart kamu tetap aman; coba lagi sebentar lagi atau kembali ke chart.', retry: 'Coba lagi', historyTitle: 'History Guest', emptyHistory: 'Belum ada history di perangkat ini.', askDetail: 'Tanya detail ke Hermex', askPlaceholder: 'Contoh: kenapa karier saya condong ke edukasi?', dailyQuest: 'Daily Cosmic Quest', dailyQuestBody: 'Claim refleksi harian untuk menyimpan streak guest dan badge lokal.', claimBadge: 'Claim badge hari ini', claimedBadge: 'Quest hari ini selesai', xp: 'XP', badges: 'Badge', accountTitle: 'Profile Saya', accountGuest: 'Belum login. Kamu tetap bisa memakai Hermex sebagai guest.', currentCard: 'Kartu karakter aktif', viewCard: 'Lihat kartu karakter', logout: 'Keluar', termsTitle: 'Syarat Google OAuth', termsIntro: 'Sebelum lanjut Google login, pahami dulu cara Hermex memakai data dan batas MVP open-source ini.', termsAccept: 'Saya setuju dan lanjut', termsBack: 'Baca nanti', ethics: 'Untuk refleksi dan pengembangan diri, bukan ramalan mutlak.'
     },
     en: {
       badge: 'Alpha game', title: 'Start your tiny astrology quest.',
       subtitle: 'Enter birth context, inspect the cosmic chart, then ask Hermes for a general reflective reading.',
       name: 'Name or username', optional: 'optional', date: 'Birth date', time: 'Birth time', place: 'Birth place', citySearch: 'Search birth city',
       analyze: 'Open My Astrology', analyzing: 'Opening chart...', edit: 'Edit data', language: 'Language', selectedCity: 'Selected city',
-      locationHint: 'Latitude, longitude, and timezone influence the chart.', features: 'Things to try', profile: 'Character Card', chart: 'Chart Explorer', install: 'Install Hermex', installHint: 'Keep your guest chart and history easy to reopen.', history: 'History', connect: 'Connect', hermexNav: 'Hermex AI', offlineTitle: 'Offline mode is on', offlineBody: 'You can still open saved drafts, local history, and education. AI returns when internet is back.', onlineTitle: 'Connected',
+      locationHint: 'Latitude, longitude, and timezone influence the chart.', features: 'Things to try', profile: 'Character Card', profileTab: 'Profile', chart: 'Chart Explorer', install: 'Install Hermex', installHint: 'Keep your guest chart and history easy to reopen.', history: 'History', connect: 'Connect', hermexNav: 'Hermex AI', offlineTitle: 'Offline mode is on', offlineBody: 'You can still open saved drafts, local history, and education. AI returns when internet is back.', onlineTitle: 'Connected',
       askHermes: 'My Cosmic Analysis', validating: 'Confidence key', validate: 'Answer quick validation', processingTitle: 'Hermes is reading your chart',
       processingBody: 'Combining planets, zodiac, houses, aspects, and your selected language.', hermes: 'My Cosmic Analysis', summary: 'Summary',
       strengths: 'Strengths', weaknesses: 'Weaknesses', love: 'Love', interests: 'Interests', talents: 'Talents', career: 'Career Paths', fiveYear: 'Last 5-Year Roadmap',
-      back: 'Back to chart', askAgain: 'Ask Hermes again', learn: 'Learn Astrology', register: 'Register for full explanation', feedback: 'How accurate did this feel?', suggestion: 'Suggestions and feedback (optional)', sendFeedback: 'Send feedback', share: 'Share guest profile', copied: 'Link copied', registerTitle: 'Register to read the full detail', registerBody: 'Sign in to keep progress across devices. For this MVP, Google login is a visual option.', googleLogin: 'Continue with Google', email: 'Email', aiErrorTitle: 'Could not connect Hermex AI', aiErrorBody: 'Hermes could not reach the AI provider. Your chart is safe; try again in a moment or return to the chart.', retry: 'Retry', historyTitle: 'Guest History', emptyHistory: 'No local history on this device yet.', askDetail: 'Ask Hermex for detail', askPlaceholder: 'Example: why does my career lean toward education?', dailyQuest: 'Daily Cosmic Quest', dailyQuestBody: 'Claim a daily reflection to keep local guest streaks and badges.', claimBadge: 'Claim today badge', claimedBadge: 'Today quest complete', xp: 'XP', badges: 'Badges', termsTitle: 'Google OAuth Terms', termsIntro: 'Before continuing with Google login, review how Hermex uses data and the current open-source MVP boundary.', termsAccept: 'I agree and continue', termsBack: 'Read later', ethics: 'For reflection and self-development, not deterministic prediction.'
+      back: 'Back to chart', askAgain: 'Ask Hermes again', learn: 'Learn Astrology', register: 'Register for full explanation', feedback: 'How accurate did this feel?', suggestion: 'Suggestions and feedback (optional)', sendFeedback: 'Send feedback', share: 'Share guest profile', copied: 'Link copied', registerTitle: 'Register to read the full detail', registerBody: 'Sign in to keep progress across devices. For this MVP, Google login is a visual option.', googleLogin: 'Continue with Google', email: 'Email', aiErrorTitle: 'Could not connect Hermex AI', aiErrorBody: 'Hermes could not reach the AI provider. Your chart is safe; try again in a moment or return to the chart.', retry: 'Retry', historyTitle: 'Guest History', emptyHistory: 'No local history on this device yet.', askDetail: 'Ask Hermex for detail', askPlaceholder: 'Example: why does my career lean toward education?', dailyQuest: 'Daily Cosmic Quest', dailyQuestBody: 'Claim a daily reflection to keep local guest streaks and badges.', claimBadge: 'Claim today badge', claimedBadge: 'Today quest complete', xp: 'XP', badges: 'Badges', accountTitle: 'My Profile', accountGuest: 'Not signed in yet. You can still use Hermex as a guest.', currentCard: 'Active character card', viewCard: 'View character card', logout: 'Logout', termsTitle: 'Google OAuth Terms', termsIntro: 'Before continuing with Google login, review how Hermex uses data and the current open-source MVP boundary.', termsAccept: 'I agree and continue', termsBack: 'Read later', ethics: 'For reflection and self-development, not deterministic prediction.'
     }
   } satisfies Record<Lang, Record<string, string>>;
 
@@ -83,6 +84,8 @@
   let gameState: GuestGameState = { xp: 0, streak: 0, badges: [] };
   let gameMessage = '';
   let termsAccepted = false;
+  let authUser: AuthUser | null = null;
+  let authChecked = false;
 
   $: copy = t[lang];
 
@@ -197,6 +200,9 @@
     storageReady = true;
     const params = new URLSearchParams(window.location.search);
     const sharedProfile = params.get('profile');
+    const authStatus = params.get('auth');
+    if (authStatus?.startsWith('google')) screen = 'account';
+    loadAuthUser();
     if (sharedProfile) {
       getProfile(sharedProfile).then((loaded) => {
         profile = loaded;
@@ -295,6 +301,19 @@
   }
   function startGoogleLogin() {
     window.location.href = `${API_BASE}/api/v1/auth/google/start`;
+  }
+  async function loadAuthUser() {
+    try {
+      const result = await getAuthMe();
+      authUser = result.authenticated ? result.user : null;
+    } catch {
+      authUser = null;
+    } finally {
+      authChecked = true;
+    }
+  }
+  function logoutGoogle() {
+    window.location.href = `${API_BASE}/api/v1/auth/logout`;
   }
   function rememberGuest(nextProfile: any) {
     if (!nextProfile?.profile_id) return;
@@ -416,7 +435,7 @@
       {#if screen !== 'home'}<button class="ghost" on:click={() => (screen = 'home')}>{copy.edit}</button>{/if}<button class="lang" on:click={toggleLang}>{lang.toUpperCase()}</button>
     </header>
 
-    <nav class="bottom-nav"><button class:active={screen === 'profile'} on:click={() => (screen = profile ? 'profile' : 'home')}>✦<span>{copy.profile}</span></button><button class:active={screen === 'connect'} on:click={() => (screen = 'connect')}>↗<span>{copy.connect}</span></button><button class:active={screen === 'hermes-chat'} on:click={() => (screen = 'hermes-chat')}>☿<span>{copy.hermexNav}</span></button></nav>
+    <nav class="bottom-nav"><button class:active={screen === 'account'} on:click={() => (screen = 'account')}>✦<span>{copy.profileTab}</span></button><button class:active={screen === 'connect'} on:click={() => (screen = 'connect')}>↗<span>{copy.connect}</span></button><button class:active={screen === 'hermes-chat'} on:click={() => (screen = 'hermes-chat')}>☿<span>{copy.hermexNav}</span></button></nav>
 
     {#if screen === 'home'}
       <section class="hero-card"><div><span>{copy.features}</span><h1>{copy.title}</h1><p>{copy.subtitle}</p></div><svg viewBox="0 0 220 220"><circle cx="110" cy="110" r="82"/><circle cx="110" cy="110" r="50"/><path d="M138 47a31 31 0 1 0 0 62 38 38 0 1 1 0-62z"/><circle cx="49" cy="83" r="13"/><circle cx="171" cy="148" r="16"/><path d="M101 128l8 18 18 8-18 8-8 18-8-18-18-8 18-8 8-18z"/></svg></section>
@@ -435,6 +454,8 @@
         <button class="primary-action" on:click={runAnalysis} disabled={loading}>✦ {loading ? copy.analyzing : copy.analyze}</button>{#if error}<p class="error">{error}</p>{/if}
       </article></section>
     {/if}
+
+    {#if screen === 'account'}<section class="card account-page"><div class="section-title"><span>✦</span><h2>{copy.accountTitle}</h2></div><div class="account-hero">{#if authUser}<div class="account-id">{#if authUser.picture}<img src={authUser.picture} alt="" />{:else}<span>{(authUser.name || authUser.email || 'G').slice(0, 1)}</span>{/if}<div><strong>{authUser.name || 'Google User'}</strong><small>{authUser.email}</small></div></div><button class="share-action" on:click={logoutGoogle}>{copy.logout}</button>{:else}<p>{authChecked ? copy.accountGuest : copy.analyzing}</p><button class="google-action" on:click={startGoogleLogin}>G {copy.googleLogin}</button>{/if}</div><div class="account-grid"><article><h3>{copy.currentCard}</h3>{#if profile}<p><strong>{profile.display_name || 'Guest'}</strong> · {profile.traits.dominant_element}</p><div class="chips compact">{#each profile.traits.interests as item}<span>{item}</span>{/each}</div><button class="soft-action oracle-button" on:click={() => (screen = 'profile')}>{copy.viewCard}</button>{:else}<p>{lang === 'id' ? 'Belum ada chart aktif. Buka Astrologyku dulu untuk membuat kartu karakter.' : 'No active chart yet. Open your astrology first to create a character card.'}</p><button class="soft-action oracle-button" on:click={() => (screen = 'home')}>{copy.analyze}</button>{/if}</article><article><h3>{copy.historyTitle}</h3>{#if guestHistory.length}<div class="history-list mini">{#each guestHistory.slice(0, 4) as item}<button on:click={() => openHistoryItem(item)}><strong>{item.display_name || 'Guest'}</strong><span>{item.birth_place}</span><small>{item.dominant} · {new Date(item.created_at).toLocaleDateString()}</small></button>{/each}</div><button class="share-action" on:click={() => (screen = 'history')}>{copy.history}</button>{:else}<p>{copy.emptyHistory}</p>{/if}</article></div></section>{/if}
 
     {#if screen === 'profile' && profile}
       <section class="profile-grid"><article class="card character-card"><div class="section-title"><span>02</span><h2>{copy.profile}</h2></div><div class="natal-wheel"><svg viewBox="0 0 300 300"><circle cx="150" cy="150" r="132"/><circle cx="150" cy="150" r="96"/><circle cx="150" cy="150" r="44"/>{#each Array(12) as _, index}<line x1="150" y1="18" x2="150" y2="54" transform={`rotate(${index * 30} 150 150)`}/>{/each}{#each chartLines as line}<line class="aspect-line" x1={line.left.x} y1={line.left.y} x2={line.right.x} y2={line.right.y}/>{/each}{#each planets.slice(0, 12) as [name, planet]}{@const point = planetPoint(name)}{#if point}<g><circle cx={point.x} cy={point.y} r="10"/><text x={point.x} y={point.y - 15}>{name.slice(0, 2)}</text></g>{/if}{/each}</svg></div><h3>{profile.display_name || 'Seeker'}</h3><p class="dominant">{profile.traits.dominant_element}</p><div class="meter"><span style={`width:${Math.round(profile.traits.confidence.score * 100)}%`}></span></div><p>{profile.traits.confidence.label} ({profile.traits.confidence.score})</p><div class="chips">{#each profile.traits.interests as item}<span>{item}</span>{/each}</div>{#if profile.needs_validation}<button class="soft-action" on:click={runValidation}>{copy.validate}</button>{/if}</article>
@@ -499,9 +520,20 @@
 .game-stats span, .badge-row span { border-radius: 999px; padding: 8px 11px; background: #fffdf7; color: var(--ink); font-weight: 950; box-shadow: inset 0 0 0 1px rgba(69,48,79,.1); }
 .badge-row span { background: #fff0a8; }
 .terms-page ol { margin: 16px 0 0; padding-left: 22px; color: var(--muted); font-weight: 820; line-height: 1.55; }
+.account-page { position: relative; z-index: 1; }
+.account-hero { border-radius: 26px; padding: 16px; background: linear-gradient(135deg, #fff0a8, #dcfff1); }
+.account-id { display: flex; align-items: center; gap: 12px; }
+.account-id img, .account-id > span { width: 54px; height: 54px; border-radius: 18px; object-fit: cover; background: #45304f; color: #fff8df; display: grid; place-items: center; font-weight: 950; font-size: 1.4rem; }
+.account-id strong, .account-id small { display: block; }
+.account-id small { color: var(--muted); font-weight: 850; margin-top: 2px; }
+.account-grid { display: grid; grid-template-columns: .9fr 1.1fr; gap: 14px; margin-top: 14px; }
+.account-grid article { border: 1px solid rgba(69,48,79,.1); border-radius: 24px; padding: 16px; background: #fffdf7; }
+.chips.compact { justify-content: flex-start; }
+.history-list.mini { margin-top: 10px; }
+.history-list.mini button { padding: 12px; border-radius: 18px; }
 footer p { margin: 0 0 8px; }
 .legal-links { display: flex; justify-content: center; gap: 12px; }
 .legal-links a { color: var(--ink); font-weight: 950; text-decoration: none; }
 .legal-links a:hover { text-decoration: underline; }
-@media (max-width: 720px) { .bottom-nav { position: fixed; left: 14px; right: 14px; bottom: 10px; width: auto; margin: 0; grid-template-columns: repeat(3, 1fr); } .install-badge.show { position: fixed; left: 14px; right: 14px; bottom: 92px; width: auto; z-index: 24; margin: 0; } .phone-frame { padding-bottom: 184px; } }
+@media (max-width: 720px) { .bottom-nav { position: fixed; left: 14px; right: 14px; bottom: 10px; width: auto; margin: 0; grid-template-columns: repeat(3, 1fr); } .install-badge.show { position: fixed; left: 14px; right: 14px; bottom: 92px; width: auto; z-index: 24; margin: 0; } .phone-frame { padding-bottom: 184px; } .account-grid { grid-template-columns: 1fr; } }
 </style>

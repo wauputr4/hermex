@@ -18,6 +18,7 @@ export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(payload)
   });
 
@@ -33,7 +34,7 @@ export async function apiGet<T>(path: string): Promise<T> {
     throw new Error('Hermex is offline. Saved guest history and education are still available.');
   }
 
-  const response = await fetch(`${API_BASE}${path}`);
+  const response = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
 
   if (!response.ok) {
     throw new Error(await response.text());
@@ -70,4 +71,8 @@ export async function submitFeedback(payload: {
   source?: string;
 }) {
   return apiPost('/api/v1/feedback', payload);
+}
+
+export async function getAuthMe() {
+  return apiGet<{ authenticated: boolean; user: null | { name?: string; email?: string; picture?: string } }>('/api/v1/auth/me');
 }
