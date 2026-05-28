@@ -10,7 +10,7 @@
     id: {
       badge: 'Alpha game', title: 'Mulai quest astrologi kecilmu.',
       subtitle: 'Masukkan data lahir, lihat chart kosmik, lalu minta Hermes membaca pola umum untuk refleksi diri.',
-      name: 'Nama', optional: 'opsional', date: 'Tanggal lahir', time: 'Jam lahir', place: 'Tempat lahir', citySearch: 'Cari kota lahir',
+      name: 'Nama atau username', optional: 'opsional', date: 'Tanggal lahir', time: 'Jam lahir', place: 'Tempat lahir', citySearch: 'Cari kota lahir',
       analyze: 'Buka Astrologyku', analyzing: 'Membuka chart...', edit: 'Edit data', language: 'Bahasa', selectedCity: 'Kota terpilih',
       locationHint: 'Lat/lon dan zona waktu ikut memengaruhi chart.', features: 'Yang bisa dicoba', profile: 'Kartu Karakter', chart: 'Chart Explorer', install: 'Install Hermex', installHint: 'Biar chart dan history guest tetap mudah dibuka lagi.', history: 'History', connect: 'Connect', hermexNav: 'Hermex AI',
       askHermes: 'Analisis Kosmik Saya', validating: 'Kunci kepastian', validate: 'Jawab validasi cepat', processingTitle: 'Hermes sedang membaca chart',
@@ -21,7 +21,7 @@
     en: {
       badge: 'Alpha game', title: 'Start your tiny astrology quest.',
       subtitle: 'Enter birth context, inspect the cosmic chart, then ask Hermes for a general reflective reading.',
-      name: 'Name', optional: 'optional', date: 'Birth date', time: 'Birth time', place: 'Birth place', citySearch: 'Search birth city',
+      name: 'Name or username', optional: 'optional', date: 'Birth date', time: 'Birth time', place: 'Birth place', citySearch: 'Search birth city',
       analyze: 'Open My Astrology', analyzing: 'Opening chart...', edit: 'Edit data', language: 'Language', selectedCity: 'Selected city',
       locationHint: 'Latitude, longitude, and timezone influence the chart.', features: 'Things to try', profile: 'Character Card', chart: 'Chart Explorer', install: 'Install Hermex', installHint: 'Keep your guest chart and history easy to reopen.', history: 'History', connect: 'Connect', hermexNav: 'Hermex AI',
       askHermes: 'My Cosmic Analysis', validating: 'Confidence key', validate: 'Answer quick validation', processingTitle: 'Hermes is reading your chart',
@@ -73,6 +73,7 @@
   let canInstall = false;
   let guestHistory: GuestHistoryItem[] = [];
   let shareStatus = '';
+  let shareLink = '';
   let detailQuestion = '';
   let detailAnswer = '';
   let detailLoading = false;
@@ -247,7 +248,7 @@
       confidence: data.confidence ?? result?.confidence
     };
   }
-  function roadmapTitle(item: any, index: number) { return item?.year || item?.horizon || `Year ${index + 1}`; }
+  function roadmapTitle(_item: any, index: number) { return String(new Date().getFullYear() - 5 + index); }
   function roadmapText(item: any) { return item?.description || item?.focus || item?.theme || displayValue(item); }
   function explainMore() { screen = 'register'; }
   function loadGuestHistory(): GuestHistoryItem[] {
@@ -279,9 +280,15 @@
   async function shareProfile() {
     if (!profile?.profile_id) return;
     const link = `${window.location.origin}${window.location.pathname}?profile=${profile.profile_id}`;
-    if (navigator.share) await navigator.share({ title: 'Hermex Quest', text: 'Coba lihat chart Hermex guest ini.', url: link }).catch(() => undefined);
-    else await navigator.clipboard?.writeText(link).catch(() => undefined);
-    shareStatus = copy.copied;
+    shareLink = link;
+    let copied = false;
+    if (navigator.share) {
+      await navigator.share({ title: 'Hermex Quest', text: 'Coba lihat chart Hermex guest ini.', url: link }).then(() => (copied = true)).catch(() => undefined);
+    }
+    if (!copied && navigator.clipboard) {
+      await navigator.clipboard.writeText(link).then(() => (copied = true)).catch(() => undefined);
+    }
+    shareStatus = copied ? copy.copied : (lang === 'id' ? 'Salin link di bawah ini' : 'Copy the link below');
     window.setTimeout(() => (shareStatus = ''), 1600);
   }
   async function submitFeedback() {
@@ -364,6 +371,8 @@
       {#if screen !== 'home'}<button class="ghost" on:click={() => (screen = 'home')}>{copy.edit}</button>{/if}<button class="lang" on:click={toggleLang}>{lang.toUpperCase()}</button>
     </header>
 
+    <nav class="bottom-nav"><button class:active={screen === 'profile'} on:click={() => (screen = profile ? 'profile' : 'home')}>✦<span>{copy.profile}</span></button><button class:active={screen === 'connect'} on:click={() => (screen = 'connect')}>↗<span>{copy.connect}</span></button><button class:active={screen === 'hermes-chat'} on:click={() => (screen = 'hermes-chat')}>☿<span>{copy.hermexNav}</span></button></nav>
+
     {#if screen === 'home'}
       <section class="hero-card"><div><span>{copy.features}</span><h1>{copy.title}</h1><p>{copy.subtitle}</p></div><svg viewBox="0 0 220 220"><circle cx="110" cy="110" r="82"/><circle cx="110" cy="110" r="50"/><path d="M138 47a31 31 0 1 0 0 62 38 38 0 1 1 0-62z"/><circle cx="49" cy="83" r="13"/><circle cx="171" cy="148" r="16"/><path d="M101 128l8 18 18 8-18 8-8 18-8-18-18-8 18-8 8-18z"/></svg></section>
       <button class="install-badge show" on:click={installApp}>⬇ {copy.install}<small>{copy.installHint}</small></button>
@@ -387,7 +396,7 @@
 
     {#if screen === 'hermes-loading'}<section class="loading-screen"><div class="loader"><span></span><span></span><span></span><strong>☿</strong></div><h2>{copy.processingTitle}</h2><p class="quote">{quotes[quoteIndex]}</p><small>{copy.processingBody}</small></section>{/if}
 
-    {#if screen === 'hermes' && oracle}<section class="card hermes-card"><div class="section-title"><span>04</span><h2>{copy.hermes}</h2></div><div class="summary-card">{@render Icon(1)}<p><mark>{summaryHighlight.lead}</mark>{#if summaryHighlight.rest}<br /><span>{summaryHighlight.rest}</span>{/if}</p></div><div class="insight-grid">{@render Insight(copy.love, oracle.love, '♡')}{@render Insight(copy.strengths, oracle.strengths, '✦')}{@render Insight(copy.weaknesses, oracle.weaknesses, '△')}{@render Insight(copy.interests, oracle.interests, '☉')}{@render Insight(copy.talents, oracle.talents, '☾')}{@render Insight(copy.career, oracle.careers, '☿')}</div><div class="timeline"><h3>{copy.fiveYear}</h3>{#each oracle.fiveYear.slice(0, 5) as item, index}<div><span>{roadmapTitle(item, index)}</span><p>{roadmapText(item)}</p></div>{/each}<button class="text-link" on:click={explainMore}>{copy.register}</button></div><div class="feedback"><h3>{copy.feedback}</h3><div class="stars">{#each [1,2,3,4,5] as star}<button class:active={rating >= star} on:click={() => (rating = star)}>★</button>{/each}</div><textarea bind:value={feedbackText} placeholder={copy.suggestion}></textarea><button class="soft-action" on:click={submitFeedback}>{copy.sendFeedback}</button><button class="share-action" on:click={shareProfile}>↗ {copy.share}</button>{#if shareStatus}<small>{shareStatus}</small>{/if}</div><div class="route-actions"><button class="soft-action" on:click={() => (screen = 'profile')}>{copy.back}</button><button class="soft-action oracle-button" on:click={runInterpretation}>{copy.askAgain}</button></div></section>{/if}
+    {#if screen === 'hermes' && oracle}<section class="card hermes-card"><div class="section-title"><span>04</span><h2>{copy.hermes}</h2></div><div class="summary-card">{@render Icon(1)}<p><mark>{summaryHighlight.lead}</mark>{#if summaryHighlight.rest}<br /><span>{summaryHighlight.rest}</span>{/if}</p></div><div class="insight-grid">{@render Insight(copy.love, oracle.love, '♡')}{@render Insight(copy.strengths, oracle.strengths, '✦')}{@render Insight(copy.weaknesses, oracle.weaknesses, '△')}{@render Insight(copy.interests, oracle.interests, '☉')}{@render Insight(copy.talents, oracle.talents, '☾')}{@render Insight(copy.career, oracle.careers, '☿')}</div><div class="timeline"><h3>{copy.fiveYear}</h3>{#each oracle.fiveYear.slice(0, 5) as item, index}<div><span>{roadmapTitle(item, index)}</span><p>{roadmapText(item)}</p></div>{/each}<button class="text-link" on:click={explainMore}>{copy.register}</button></div><div class="feedback"><h3>{copy.feedback}</h3><div class="stars">{#each [1,2,3,4,5] as star}<button class:active={rating >= star} on:click={() => (rating = star)}>★</button>{/each}</div><textarea bind:value={feedbackText} placeholder={copy.suggestion}></textarea><button class="soft-action" on:click={submitFeedback}>{copy.sendFeedback}</button><button class="share-action" on:click={shareProfile}>↗ {copy.share}</button>{#if shareStatus}<small>{shareStatus}</small>{/if}{#if shareLink}<input class="share-link" readonly value={shareLink} on:focus={(event) => event.currentTarget.select()} />{/if}</div><div class="route-actions"><button class="soft-action" on:click={() => (screen = 'profile')}>{copy.back}</button><button class="soft-action oracle-button" on:click={runInterpretation}>{copy.askAgain}</button></div></section>{/if}
 
 
 
@@ -396,10 +405,9 @@
     {#if screen === 'learn'}<section class="card learn-page"><div class="section-title"><span>☿</span><h2>{copy.learn}</h2></div><div class="education-grid">{#each educationCards as card, index}<button class:active={activeEducation === index} on:click={() => { activeEducation = index; screen = 'learn-detail'; }}>{@render Icon(index)}<h3>{card[0]}</h3><p>{card[1]}</p><small>{lang === 'id' ? 'Buka detail' : 'Open detail'}</small></button>{/each}</div><button class="soft-action" on:click={() => (screen = 'home')}>{copy.back}</button></section>{/if}
     {#if screen === 'learn-detail'}<section class="card learn-page detail-page"><div class="section-title"><span>☿</span><h2>{educationCards[activeEducation][0]}</h2></div><article class="education-detail">{@render Icon(activeEducation, true)}<div><p>{educationCards[activeEducation][1]}</p><p>{lang === 'id' ? 'Bayangkan ini seperti lapisan peta: planet adalah aktor, zodiac adalah gaya bicara, house adalah panggung, dan aspect adalah hubungan antar aktor.' : 'Think of this as map layers: planets are actors, zodiac signs are speaking styles, houses are stages, and aspects are relationships between actors.'}</p></div></article><div class="detail-list">{#each educationDetailRows as row}<article><strong>{row[0]}</strong><p>{row[1]}</p></article>{/each}</div><button class="soft-action" on:click={() => (screen = 'learn')}>{copy.learn}</button></section>{/if}
     {#if screen === 'history'}<section class="card history-page"><div class="section-title"><span>⌁</span><h2>{copy.historyTitle}</h2></div>{#if guestHistory.length}<div class="history-list">{#each guestHistory as item}<button on:click={() => openHistoryItem(item)}><strong>{item.display_name || 'Guest'}</strong><span>{item.birth_place}</span><small>{item.dominant} · {new Date(item.created_at).toLocaleDateString()}</small></button>{/each}</div>{:else}<p>{copy.emptyHistory}</p>{/if}</section>{/if}
-    {#if screen === 'connect'}<section class="card connect-page"><div class="section-title"><span>↗</span><h2>{copy.connect}</h2></div><p>{lang === 'id' ? 'Bagikan profil guest sebagai ajakan mencoba Hermex. Login Google disiapkan untuk versi berikutnya.' : 'Share your guest profile as an invitation to try Hermex. Google login is prepared for the next version.'}</p><button class="google-action" on:click={() => (screen = 'register')}>G {copy.googleLogin}</button><button class="share-action" on:click={shareProfile}>↗ {copy.share}</button>{#if shareStatus}<small>{shareStatus}</small>{/if}</section>{/if}
+    {#if screen === 'connect'}<section class="card connect-page"><div class="section-title"><span>↗</span><h2>{copy.connect}</h2></div><p>{lang === 'id' ? 'Bagikan profil guest sebagai ajakan mencoba Hermex. Login Google disiapkan untuk versi berikutnya.' : 'Share your guest profile as an invitation to try Hermex. Google login is prepared for the next version.'}</p><button class="google-action" on:click={() => (screen = 'register')}>G {copy.googleLogin}</button><button class="share-action" on:click={shareProfile}>↗ {copy.share}</button>{#if shareStatus}<small>{shareStatus}</small>{/if}{#if shareLink}<input class="share-link" readonly value={shareLink} on:focus={(event) => event.currentTarget.select()} />{/if}</section>{/if}
     {#if screen === 'hermes-chat'}<section class="card chat-page"><div class="section-title"><span>☿</span><h2>{copy.hermexNav}</h2></div><p>{copy.askDetail}</p><textarea bind:value={detailQuestion} placeholder={copy.askPlaceholder}></textarea><button class="soft-action oracle-button" on:click={askDetail} disabled={detailLoading || !profile}>{detailLoading ? copy.analyzing : copy.askDetail}</button>{#if !profile}<p class="error">{lang === 'id' ? 'Buka Astrologyku dulu agar Hermex punya chart untuk dibaca.' : 'Open your astrology first so Hermex has a chart to read.'}</p>{/if}{#if detailAnswer}<div class="detail-answer">{@render Icon(1)}<p>{detailAnswer}</p></div>{/if}</section>{/if}
     {#if screen === 'register'}<section class="card register-page"><div class="section-title"><span>✦</span><h2>{copy.registerTitle}</h2></div><p>{copy.registerBody}</p><button class="google-action" on:click={() => undefined}>G {copy.googleLogin}</button><div class="split"><input placeholder="Email" /><input placeholder="Nama" /></div><button class="primary-action" on:click={() => (screen = 'hermes')}>{copy.back}</button></section>{/if}
-    <nav class="bottom-nav"><button class:active={screen === 'profile'} on:click={() => (screen = profile ? 'profile' : 'home')}>✦<span>{copy.profile}</span></button><button class:active={screen === 'connect'} on:click={() => (screen = 'connect')}>↗<span>{copy.connect}</span></button><button class:active={screen === 'hermes-chat'} on:click={() => (screen = 'hermes-chat')}>☿<span>{copy.hermexNav}</span></button></nav>
     <footer>{copy.ethics}</footer>
   </section>
 </main>
@@ -416,7 +424,7 @@
 .history-strip { margin-top: 10px; background: linear-gradient(135deg, #fffdf7, #effbf6); }
 .share-action, .google-action { width: 100%; border: 0; border-radius: 999px; padding: 14px 18px; margin-top: 12px; background: #fffdf7; color: var(--ink); font-weight: 950; box-shadow: inset 0 0 0 2px rgba(47,36,55,.12), 0 6px 0 rgba(47,36,55,.12); }
 .google-action { background: linear-gradient(135deg, #fff, #eef5ff); }
-.bottom-nav { position: sticky; bottom: 12px; z-index: 20; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0 8px; padding: 8px; border: 1px solid rgba(47,36,55,.1); border-radius: 28px; background: rgba(255,253,247,.86); backdrop-filter: blur(14px); box-shadow: 0 18px 44px rgba(47,36,55,.16); }
+.bottom-nav { position: relative; z-index: 20; display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); gap: 8px; width: min(560px, 100%); margin: -4px 0 18px auto; padding: 8px; border: 1px solid rgba(47,36,55,.1); border-radius: 28px; background: rgba(255,253,247,.86); backdrop-filter: blur(14px); box-shadow: 0 18px 44px rgba(47,36,55,.16); }
 .bottom-nav button { border: 0; border-radius: 20px; padding: 10px 6px; background: transparent; color: var(--muted); font-weight: 950; display: grid; gap: 2px; place-items: center; }
 .bottom-nav button.active { background: #4b3155; color: #fff8df; }
 .bottom-nav span { font-size: .72rem; }
@@ -430,6 +438,7 @@
 .chat-page textarea { width: 100%; min-height: 130px; border-radius: 22px; border: 1px solid rgba(47,36,55,.14); padding: 16px; font: inherit; box-sizing: border-box; }
 .detail-answer { margin-top: 14px; display: grid; grid-template-columns: 58px 1fr; gap: 12px; align-items: start; border-radius: 24px; padding: 16px; background: linear-gradient(135deg, #fff6aa, #c9f7ed); }
 .detail-answer p { margin: 0; line-height: 1.55; }
+.share-link { margin-top: 10px; font-size: .78rem; }
 .insight li strong { color: var(--ink); background: linear-gradient(180deg, transparent 55%, rgba(244,193,93,.35) 0); }
-@media (max-width: 720px) { .bottom-nav { position: fixed; left: 14px; right: 14px; bottom: 10px; } .phone-frame { padding-bottom: 104px; } }
+@media (max-width: 720px) { .bottom-nav { position: fixed; left: 14px; right: 14px; bottom: 10px; width: auto; margin: 0; grid-template-columns: repeat(3, 1fr); } .install-badge.show { position: fixed; left: 14px; right: 14px; bottom: 92px; width: auto; z-index: 24; margin: 0; } .phone-frame { padding-bottom: 184px; } }
 </style>

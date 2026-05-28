@@ -53,7 +53,8 @@ Aturan:
   five_year_roadmap, development_plan, confidence.
 - strengths, weaknesses, interests, talents, careers, love harus array string.
 - five_year_roadmap harus array object dengan year, theme, focus.
-- Untuk five_year_roadmap, gunakan label 5 tahun terakhir secara umum dan isi focus 1-2 kalimat yang cukup informatif.
+- Untuk five_year_roadmap, gunakan 5 tahun terakhir yang sudah lewat, mundur dari tahun sekarang, bukan 5 tahun ke depan.
+- Isi setiap focus 1-2 kalimat yang cukup informatif.
 - development_plan boleh array object dengan horizon, focus, confidence.
 - Buat ringkas, praktis, dan mudah discan di kartu UI.
 """.strip()
@@ -673,6 +674,7 @@ async def call_llm(profile: dict[str, Any], language: str = "id", question: str 
     prompt_payload = {
         "profile_id": profile["profile_id"],
         "language": language,
+        "current_year": datetime.now(timezone.utc).year,
         "birth_context": {
             "birth_date": profile.get("birth_date"),
             "birth_time": profile.get("birth_time"),

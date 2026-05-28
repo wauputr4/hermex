@@ -4,6 +4,10 @@
 
 Website/domain target: **https://hermex.fun**
 
+Repository target: **https://github.com/wauputra/hermex**
+
+Hermex is intentionally open source: self-hosted users can run the full community edition with their own infrastructure and AI provider credentials.
+
 Hermex turns birth context into a natal chart, shows readable astrology signals, and asks a configurable OpenAI-compatible AI provider to generate concise, non-deterministic reflections around strengths, love, interests, talents, career direction, and a last-5-year roadmap.
 
 ## MVP highlights
