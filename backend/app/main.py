@@ -845,7 +845,10 @@ async def call_llm(profile: dict[str, Any], language: str = "id", question: str 
 app = FastAPI(title="Hermex API", version="0.1.0-alpha")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(","),
+    allow_origins=os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:18173,http://127.0.0.1:18173",
+    ).split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -22,6 +22,7 @@ Hermex turns birth context into a natal chart, shows readable astrology signals,
 - SVG natal-wheel visualization, expanded planet cards, and aspect list.
 - Interactive astrology education page for planets, zodiac signs, houses, and aspects.
 - Google OAuth terms page placeholder for hosted account login.
+- Public legal pages for Google OAuth verification: `/terms` and `/privacy`.
 - AI interpretation page with highlighted summary, focused insight cards, roadmap, and user feedback.
 - Bottom navigation for Profile, Connect/share, and Hermex AI detail questions.
 - Local admin dashboard for overview, guest history, feedback, logs, prompt editing, and AI provider configuration.
@@ -193,6 +194,8 @@ The app treats astrology as symbolic reflection and learning material, not deter
 
 ## Documentation
 
+- Public Terms URL for OAuth setup: `https://hermex.fun/terms`
+- Public Privacy URL for OAuth setup: `https://hermex.fun/privacy`
 - [docs/PLAN.md](docs/PLAN.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
