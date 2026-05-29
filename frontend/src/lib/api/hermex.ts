@@ -120,8 +120,8 @@ export async function getAuthMe() {
   return apiGet<{ authenticated: boolean; user: null | { name?: string; email?: string; picture?: string } }>('/api/v1/auth/me');
 }
 
-export async function syncUserHistory(profile_ids: string[]) {
-  return apiPost('/api/v1/user/history/sync', { profile_ids });
+export async function syncUserHistory(profile_claims: Array<{ profile_id: string; claim_token: string }>) {
+  return apiPost('/api/v1/user/history/sync', { profile_claims });
 }
 
 export async function getUserHistory() {

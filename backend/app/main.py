@@ -135,8 +135,14 @@ class PublicProfileInput(BaseModel):
     bio: str | None = Field(default=None, max_length=240)
 
 
+class ProfileClaimInput(BaseModel):
+    profile_id: str = Field(max_length=80)
+    claim_token: str = Field(min_length=16, max_length=160)
+
+
 class UserHistorySyncInput(BaseModel):
     profile_ids: list[str] = Field(default_factory=list, max_length=50)
+    profile_claims: list[ProfileClaimInput] = Field(default_factory=list, max_length=50)
 
 
 class SkyPostInput(BaseModel):
@@ -863,7 +869,7 @@ def latest_interpretation(profile_id: str) -> dict[str, Any] | None:
 
 
 def public_profile_payload(row: sqlite3.Row) -> dict[str, Any]:
-    profile = load_profile(row["profile_id"])
+    profile = public_profile_view(load_profile(row["profile_id"]))
     return {
         "username": row["username"],
         "display_name": row["display_name"] or profile.get("display_name"),
@@ -874,6 +880,13 @@ def public_profile_payload(row: sqlite3.Row) -> dict[str, Any]:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def public_profile_view(profile: dict[str, Any]) -> dict[str, Any]:
+    public_profile = json.loads(json.dumps(profile))
+    public_profile.pop("profile_id", None)
+    public_profile.pop("claim_token", None)
+    return public_profile
 
 
 def default_sky_posts() -> list[dict[str, str]]:
@@ -1266,19 +1279,26 @@ def auth_logout() -> RedirectResponse:
 def sync_user_history(payload: UserHistorySyncInput, request: Request) -> dict[str, Any]:
     user = require_google_user(request)
     user_sub = str(user.get("sub") or user.get("email"))
-    profile_ids = list(dict.fromkeys([profile_id for profile_id in payload.profile_ids if profile_id]))
+    profile_claims = list({claim.profile_id: claim for claim in payload.profile_claims if claim.profile_id}.values())
     linked_count = 0
     with db() as conn:
-        for profile_id in profile_ids:
-            exists = conn.execute("SELECT 1 FROM profiles WHERE id = ?", (profile_id,)).fetchone()
-            if not exists:
+        for claim in profile_claims:
+            row = conn.execute("SELECT profile_json FROM profiles WHERE id = ?", (claim.profile_id,)).fetchone()
+            if not row:
+                continue
+            try:
+                profile_json = json.loads(row["profile_json"])
+            except json.JSONDecodeError:
+                continue
+            expected_token = str(profile_json.get("claim_token") or "")
+            if not expected_token or not secrets.compare_digest(expected_token, claim.claim_token):
                 continue
             conn.execute(
                 """
                 INSERT OR IGNORE INTO user_profiles (user_sub, profile_id, linked_at)
                 VALUES (?, ?, ?)
                 """,
-                (user_sub, profile_id, now_iso()),
+                (user_sub, claim.profile_id, now_iso()),
             )
             linked_count += 1
     return {"status": "ok", "linked": linked_count}
@@ -1337,6 +1357,7 @@ def analyze_birth(payload: BirthProfileInput) -> dict[str, Any]:
     traits = build_trait_profile(chart, time_unknown)
     profile = {
         "profile_id": profile_id,
+        "claim_token": secrets.token_urlsafe(32),
         "display_name": payload.display_name,
         "birth_date": payload.birth_date.isoformat(),
         "birth_time": payload.birth_time,
@@ -2257,6 +2278,8 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
             {''.join(cards) or '<p>No guests yet.</p>'}
           </section>
         </main>
+        <script id="llm-config-data" type="application/json">{llm_config_json}</script>
+        <script id="guest-data" type="application/json">{guest_payload_json}</script>
         <script>
           document.querySelectorAll('.admin-menu button').forEach((button) => {{
             button.addEventListener('click', () => {{
@@ -2267,7 +2290,7 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
             }});
           }});
 
-          const initialConfig = {llm_config_json};
+          const initialConfig = JSON.parse(document.getElementById('llm-config-data').textContent || '{{}}');
           const provider = document.getElementById('provider');
           const baseUrl = document.getElementById('baseUrl');
           const apiKey = document.getElementById('apiKey');
@@ -2277,7 +2300,7 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
           const requestsPerMinute = document.getElementById('requestsPerMinute');
           const requestsPerDay = document.getElementById('requestsPerDay');
           const providerStatus = document.getElementById('providerStatus');
-          const guestPayload = {guest_payload_json};
+          const guestPayload = JSON.parse(document.getElementById('guest-data').textContent || '[]');
 
           function setModels(models, selected) {{
             const unique = Array.from(new Set([selected, ...models].filter(Boolean)));

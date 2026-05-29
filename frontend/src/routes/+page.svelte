@@ -381,12 +381,15 @@
   async function syncLocalHistoryToAccount() {
     if (accountSyncDone) return;
     accountSyncDone = true;
-    const profileIds = Array.from(new Set([
-      ...guestHistory.map((item) => item.profile_id),
-      profile?.profile_id
-    ].filter(Boolean)));
+    const profileClaims = Array.from(new Map([
+      ...guestHistory.map((item) => item.profile),
+      profile
+    ].filter((item) => item?.profile_id && item?.claim_token).map((item) => [item.profile_id, {
+      profile_id: item.profile_id,
+      claim_token: item.claim_token
+    }])).values());
     try {
-      if (profileIds.length) await syncUserHistory(profileIds as string[]);
+      if (profileClaims.length) await syncUserHistory(profileClaims as Array<{ profile_id: string; claim_token: string }>);
       const result = await getUserHistory();
       guestHistory = result.history.map((item: any) => ({
         profile_id: item.profile_id,
@@ -450,7 +453,6 @@
       publicProfile = await getPublicProfile(username);
       profile = publicProfile.profile;
       interpretation = publicProfile.latest_interpretation;
-      if (profile) rememberGuest(profile, interpretation);
       screen = 'public-profile';
     } catch (err) {
       publicProfileStatus = err instanceof Error ? err.message : 'Unknown error';
