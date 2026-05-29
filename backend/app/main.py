@@ -551,13 +551,26 @@ def public_llm_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
+def rate_limit_client_key(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    client_host = forwarded_for.split(",", 1)[0].strip() if forwarded_for else ""
+    if not client_host:
+        client_host = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")[:120]
+    return hashlib.sha256(f"{client_host}:{user_agent}".encode()).hexdigest()[:24]
+
+
 def enforce_ai_rate_limit(request: Request, profile_id: str | None = None) -> None:
     config = get_llm_config()
     minute_limit = max(1, int(config["requests_per_minute"]))
     day_limit = max(1, int(config["requests_per_day"]))
     now = datetime.now(timezone.utc)
-    client_host = request.client.host if request.client else "unknown"
-    key = f"{client_host}:{profile_id or 'guest'}"
+    stale_cutoff = now - timedelta(days=1)
+    for bucket_key, bucket_events in list(RATE_LIMIT_BUCKETS.items()):
+        bucket_events[:] = [event_time for event_time in bucket_events if event_time > stale_cutoff]
+        if not bucket_events:
+            RATE_LIMIT_BUCKETS.pop(bucket_key, None)
+    key = f"ai:{rate_limit_client_key(request)}"
     events = RATE_LIMIT_BUCKETS.setdefault(key, [])
     events[:] = [event_time for event_time in events if now - event_time < timedelta(days=1)]
     minute_events = [event_time for event_time in events if now - event_time < timedelta(minutes=1)]
@@ -853,10 +866,8 @@ def public_profile_payload(row: sqlite3.Row) -> dict[str, Any]:
     profile = load_profile(row["profile_id"])
     return {
         "username": row["username"],
-        "email": row["email"],
         "display_name": row["display_name"] or profile.get("display_name"),
         "bio": row["bio"],
-        "profile_id": row["profile_id"],
         "profile": profile,
         "latest_interpretation": latest_interpretation(row["profile_id"]),
         "public_url": f"{public_app_url()}/@{row['username']}",
@@ -1391,12 +1402,14 @@ def get_profile(profile_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/v1/public-profiles")
-def create_public_profile(payload: PublicProfileInput) -> dict[str, Any]:
+def create_public_profile(payload: PublicProfileInput, request: Request) -> dict[str, Any]:
     profile = load_profile(payload.profile_id)
     username = payload.username.strip().lower()
     email = payload.email.strip().lower()
     if "@" not in email or "." not in email.rsplit("@", 1)[-1]:
         raise HTTPException(status_code=422, detail="Valid email is required")
+    user = read_google_session(request)
+    user_sub = str((user or {}).get("sub") or "")
 
     with db() as conn:
         existing_username = conn.execute(
@@ -1420,6 +1433,12 @@ def create_public_profile(payload: PublicProfileInput) -> dict[str, Any]:
 
         updated_at = now_iso()
         if existing_profile:
+            owner_row = conn.execute(
+                "SELECT 1 FROM user_profiles WHERE user_sub = ? AND profile_id = ?",
+                (user_sub, payload.profile_id),
+            ).fetchone()
+            if not user_sub or not owner_row:
+                raise HTTPException(status_code=403, detail="Login required to update this public profile")
             conn.execute(
                 """
                 UPDATE public_profiles
@@ -1926,6 +1945,16 @@ async def admin_sky_calendar_delete_form(request: Request) -> RedirectResponse:
     return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
 
 
+def json_script_payload(value: Any) -> str:
+    return (
+        json.dumps(value, ensure_ascii=False)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace("'", "\\u0027")
+    )
+
+
 @app.get("/admin/dashboard", response_class=HTMLResponse)
 def admin_dashboard(request: Request, limit: int = 50) -> str:
     if not is_admin_request(request):
@@ -1933,8 +1962,8 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
     data = guest_history(limit=limit, _admin=True)
     current_prompt = get_setting("llm_system_prompt", os.getenv("LLM_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT))
     llm_config = public_llm_config()
-    llm_config_json = json.dumps(llm_config)
-    guest_payload_json = json.dumps(data["guests"], ensure_ascii=False).replace("</", "<\\/")
+    llm_config_json = json_script_payload(llm_config)
+    guest_payload_json = json_script_payload(data["guests"])
     provider_options = {
         "openai_compat": "OpenAI-compatible endpoint",
         "local_fallback": "Local fallback only",

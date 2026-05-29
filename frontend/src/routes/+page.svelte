@@ -195,7 +195,19 @@
   $: summaryHighlight = oracle ? highlightSummary(oracle.summary) : { lead: '', rest: '' };
   $: keyTakeaways = oracle ? [oracle.strengths[0], oracle.weaknesses[0], oracle.careers[0]].filter(Boolean) : [];
   $: latestSkyPost = skyPosts[0];
-  $: dailyQuestDone = gameState.dailyQuestDate === new Date().toISOString().slice(0, 10);
+  $: dailyQuestDone = gameState.dailyQuestDate === localDateKey();
+
+  function localDateKey(date = new Date()) {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  function dateKeyToUtcDay(value: string) {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return 0;
+    return Date.UTC(year, month - 1, day) / 86400000;
+  }
 
   onMount(() => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => undefined);
@@ -321,10 +333,12 @@
     localStorage.setItem('hermex_guest_game', JSON.stringify(nextState));
   }
   function completeDailyQuest() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     if (dailyQuestDone) return;
+    const dayGap = gameState.dailyQuestDate ? dateKeyToUtcDay(today) - dateKeyToUtcDay(gameState.dailyQuestDate) : 1;
+    const nextStreak = dayGap === 1 ? gameState.streak + 1 : 1;
     const badges = Array.from(new Set([...gameState.badges, 'Mercury Spark']));
-    saveGameState({ xp: gameState.xp + 15, streak: gameState.streak + 1, badges, dailyQuestDate: today });
+    saveGameState({ xp: gameState.xp + 15, streak: nextStreak, badges, dailyQuestDate: today });
     gameMessage = lang === 'id' ? 'Badge Mercury Spark tersimpan lokal.' : 'Mercury Spark badge saved locally.';
     window.setTimeout(() => (gameMessage = ''), 1800);
   }
@@ -627,8 +641,8 @@
     {#if screen === 'account'}<section class="game-card account-quest"><div>{@render Icon(3)}<div><h2>{copy.dailyQuest}</h2><p>{copy.dailyQuestBody}</p></div></div><div class="game-stats"><span>{copy.xp}: {gameState.xp}</span><span>Streak: {gameState.streak}</span><span>{copy.badges}: {gameState.badges.length}</span></div>{#if gameState.badges.length}<div class="badge-row">{#each gameState.badges as badge}<span>✦ {badge}</span>{/each}</div>{/if}<button class="soft-action oracle-button" disabled={dailyQuestDone} on:click={completeDailyQuest}>{dailyQuestDone ? copy.claimedBadge : copy.claimBadge}</button>{#if gameMessage}<small>{gameMessage}</small>{/if}</section>{/if}
 
     {#if screen === 'profile' && profile}
-      <section class="profile-grid"><article class="card character-card"><div class="section-title"><span>02</span><h2>{copy.profile}</h2></div><div class="natal-wheel"><svg viewBox="0 0 300 300"><circle cx="150" cy="150" r="132"/><circle cx="150" cy="150" r="96"/><circle cx="150" cy="150" r="44"/>{#each Array(12) as _, index}<line x1="150" y1="18" x2="150" y2="54" transform={`rotate(${index * 30} 150 150)`}/>{/each}{#each chartLines as line}<line class="aspect-line" x1={line.left.x} y1={line.left.y} x2={line.right.x} y2={line.right.y}/>{/each}{#each planets.slice(0, 12) as [name, planet]}{@const point = planetPoint(name)}{#if point}<g><circle cx={point.x} cy={point.y} r="10"/><text x={point.x} y={point.y - 15}>{name.slice(0, 2)}</text></g>{/if}{/each}</svg></div><h3>{profile.display_name || 'Seeker'}</h3><p class="dominant">{profile.traits.dominant_element}</p><div class="meter"><span style={`width:${Math.round(profile.traits.confidence.score * 100)}%`}></span></div><p>{profile.traits.confidence.label} ({profile.traits.confidence.score})</p><div class="chips">{#each profile.traits.interests as item}<span>{item}</span>{/each}</div>{#if profile.needs_validation}<button class="soft-action" on:click={runValidation}>{copy.validate}</button>{/if}</article>
-      <article class="card chart-card"><div class="section-title"><span>03</span><h2>{copy.chart}</h2></div><div class="planet-grid">{#each planets.slice(0, 12) as [name, planet]}<div><strong>{name.replace('_', ' ')}</strong><span>{planet.zodiac_sign} {planet.degree_in_sign}°</span><small>House {houses.planet_houses?.[name] ?? '-'}</small></div>{/each}</div><div class="aspect-list"><h3>Aspects</h3>{#each aspects.slice(0, 10) as aspect}<p><strong>{aspect.left}</strong> {aspect.type} <strong>{aspect.right}</strong> <small>orb {aspect.orb}</small></p>{/each}</div><button class="soft-action oracle-button" on:click={runInterpretation} disabled={!isOnline}>{copy.askHermes}</button>{#if !isOnline}<p class="field-hint">{copy.offlineBody}</p>{/if}</article></section>
+      <section class="profile-grid"><article class="card character-card"><div class="section-title"><span>02</span><h2>{copy.profile}</h2></div><div class="natal-wheel"><svg viewBox="0 0 300 300"><circle cx="150" cy="150" r="132"/><circle cx="150" cy="150" r="96"/><circle cx="150" cy="150" r="44"/>{#each Array(12) as _, index}<line x1="150" y1="18" x2="150" y2="54" transform={`rotate(${index * 30} 150 150)`}/>{/each}{#each chartLines as line}<line class="aspect-line" x1={line.left.x} y1={line.left.y} x2={line.right.x} y2={line.right.y}/>{/each}{#each planets as [name, planet]}{@const point = planetPoint(name)}{#if point}<g><circle cx={point.x} cy={point.y} r="10"/><text x={point.x} y={point.y - 15}>{name.slice(0, 2)}</text></g>{/if}{/each}</svg></div><h3>{profile.display_name || 'Seeker'}</h3><p class="dominant">{profile.traits.dominant_element}</p><div class="meter"><span style={`width:${Math.round(profile.traits.confidence.score * 100)}%`}></span></div><p>{profile.traits.confidence.label} ({profile.traits.confidence.score})</p><div class="chips">{#each profile.traits.interests as item}<span>{item}</span>{/each}</div>{#if profile.needs_validation}<button class="soft-action" on:click={runValidation}>{copy.validate}</button>{/if}</article>
+      <article class="card chart-card"><div class="section-title"><span>03</span><h2>{copy.chart}</h2></div><div class="planet-grid">{#each planets as [name, planet]}<div><strong>{name.replace('_', ' ')}</strong><span>{planet.zodiac_sign} {planet.degree_in_sign}°</span><small>House {houses.planet_houses?.[name] ?? '-'}</small></div>{/each}</div><div class="aspect-list"><h3>Aspects</h3>{#each aspects.slice(0, 10) as aspect}<p><strong>{aspect.left}</strong> {aspect.type} <strong>{aspect.right}</strong> <small>orb {aspect.orb}</small></p>{/each}</div><button class="soft-action oracle-button" on:click={runInterpretation} disabled={!isOnline}>{copy.askHermes}</button>{#if !isOnline}<p class="field-hint">{copy.offlineBody}</p>{/if}</article></section>
     {/if}
 
     {#if screen === 'hermes-loading'}<section class="loading-screen"><div class="loader"><span></span><span></span><span></span><strong>☿</strong></div><h2>{copy.processingTitle}</h2><p class="quote">{quotes[quoteIndex]}</p><small>{copy.processingBody}</small></section>{/if}
