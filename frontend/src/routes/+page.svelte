@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { API_BASE, analyzeBirth, askHermexDetail, getAuthMe, getProfile, interpretProfile, submitFeedback as submitFeedbackApi, validateBirth } from '$lib/api/hermex';
+  import { API_BASE, analyzeBirth, askHermexDetail, deleteUserHistory, getAuthMe, getProfile, getPublicProfile, getSkyCalendar, getSkyNews, getUserHistory, interpretProfile, listPublicProfiles, publishPublicProfile, submitFeedback as submitFeedbackApi, syncUserHistory, validateBirth } from '$lib/api/hermex';
 
   type Lang = 'id' | 'en';
-  type Screen = 'home' | 'account' | 'profile' | 'hermes-loading' | 'hermes' | 'learn' | 'learn-detail' | 'register' | 'terms' | 'history' | 'connect' | 'hermes-chat' | 'ai-error';
-  type GuestHistoryItem = { profile_id: string; display_name?: string; birth_place: string; created_at: string; dominant: string; profile: any };
+  type Screen = 'home' | 'account' | 'profile' | 'hermes-loading' | 'hermes' | 'learn' | 'learn-detail' | 'register' | 'terms' | 'history' | 'connect' | 'public-profile' | 'sky-news' | 'sky-article' | 'hermes-chat' | 'ai-error';
+  type GuestHistoryItem = { profile_id: string; display_name?: string; birth_place: string; created_at: string; dominant: string; profile: any; interpretation?: any; interpretation_id?: string; updated_at?: string; public_username?: string };
   type GuestGameState = { xp: number; streak: number; badges: string[]; dailyQuestDate?: string };
   type AuthUser = { name?: string; email?: string; picture?: string };
 
@@ -14,22 +14,22 @@
       subtitle: 'Masukkan data lahir, lihat chart kosmik, lalu minta Hermes membaca pola umum untuk refleksi diri.',
       name: 'Nama atau username', optional: 'opsional', date: 'Tanggal lahir', time: 'Jam lahir', place: 'Tempat lahir', citySearch: 'Cari kota lahir',
       analyze: 'Buka Astrologyku', analyzing: 'Membuka chart...', edit: 'Edit data', language: 'Bahasa', selectedCity: 'Kota terpilih',
-      locationHint: 'Lat/lon dan zona waktu ikut memengaruhi chart.', features: 'Yang bisa dicoba', home: 'Home', profile: 'Kartu Karakter', profileTab: 'Profile', chart: 'Chart Explorer', install: 'Install Hermex', installHint: 'Biar chart dan history guest tetap mudah dibuka lagi.', installUnavailable: 'Kalau prompt install belum muncul, pakai menu browser: Add to Home Screen / Install app.', dismiss: 'Tutup', history: 'History', connect: 'Connect', hermexNav: 'Hermex AI', offlineTitle: 'Mode offline aktif', offlineBody: 'Kamu tetap bisa membuka draft, history, dan edukasi yang tersimpan. AI aktif lagi saat internet kembali.', onlineTitle: 'Terhubung',
+      locationHint: 'Lat/lon dan zona waktu ikut memengaruhi chart.', features: 'Yang bisa dicoba', home: 'Home', profile: 'Kartu Karakter', profileTab: 'Profile', chart: 'Chart Explorer', install: 'Install Hermex', installHint: 'Biar chart dan history guest tetap mudah dibuka lagi.', installUnavailable: 'Jika opsi install tidak muncul, coba buka Hermex dengan browser lain lalu pilih Add to Home Screen / Install app.', dismiss: 'Tutup', history: 'History', connect: 'Connect', hermexNav: 'Hermex AI', skyNews: 'Berita Langit', offlineTitle: 'Mode offline aktif', offlineBody: 'Kamu tetap bisa membuka draft, history, dan edukasi yang tersimpan. AI aktif lagi saat internet kembali.', onlineTitle: 'Terhubung',
       askHermes: 'Analisis Kosmik Saya', validating: 'Kunci kepastian', validate: 'Jawab validasi cepat', processingTitle: 'Hermes sedang membaca chart',
       processingBody: 'Menggabungkan posisi planet, zodiac, house, aspect, dan bahasa yang kamu pilih.', hermes: 'Analisis Kosmik Saya', summary: 'Ringkasan',
       strengths: 'Kekuatan', weaknesses: 'Kelemahan', love: 'Percintaan', interests: 'Minat', talents: 'Bakat', career: 'Arah Karier', fiveYear: 'Roadmap 5 tahun terakhir',
-      back: 'Kembali ke chart', askAgain: 'Tanya ulang Hermes', learn: 'Belajar Astrology', register: 'Daftar untuk penjelasan lengkap', feedback: 'Seberapa cocok hasilnya?', suggestion: 'Saran dan masukan (opsional)', sendFeedback: 'Kirim feedback', share: 'Share profil guest', copied: 'Link tersalin', registerTitle: 'Daftar untuk membaca detail lengkap', registerBody: 'Masuk untuk menyimpan progres lintas perangkat. Untuk MVP, Google login masih berupa opsi tampilan.', googleLogin: 'Lanjut dengan Google', email: 'Email', aiErrorTitle: 'Gagal menghubungkan AI Hermex', aiErrorBody: 'Hermes belum bisa terhubung ke provider AI. Chart kamu tetap aman; coba lagi sebentar lagi atau kembali ke chart.', retry: 'Coba lagi', historyTitle: 'History Guest', emptyHistory: 'Belum ada history di perangkat ini.', askDetail: 'Tanya detail ke Hermex', askPlaceholder: 'Contoh: kenapa karier saya condong ke edukasi?', dailyQuest: 'Daily Cosmic Quest', dailyQuestBody: 'Claim refleksi harian untuk menyimpan streak guest dan badge lokal.', claimBadge: 'Claim badge hari ini', claimedBadge: 'Quest hari ini selesai', xp: 'XP', badges: 'Badge', accountTitle: 'Profile Saya', accountGuest: 'Belum login. Kamu tetap bisa memakai Hermex sebagai guest.', currentCard: 'Kartu karakter aktif', viewCard: 'Lihat kartu karakter', logout: 'Keluar', termsTitle: 'Syarat Google OAuth', termsIntro: 'Sebelum lanjut Google login, pahami dulu cara Hermex memakai data dan batas MVP open-source ini.', termsAccept: 'Saya setuju dan lanjut', termsBack: 'Baca nanti', ethics: 'Untuk refleksi dan pengembangan diri, bukan ramalan mutlak.'
+      back: 'Kembali ke chart', askAgain: 'Tanya ulang Hermes', learn: 'Belajar Astrology', register: 'Daftar untuk penjelasan lengkap', feedback: 'Seberapa cocok hasilnya?', suggestion: 'Saran dan masukan (opsional)', sendFeedback: 'Kirim feedback', share: 'Publikasikan profil astrology', copied: 'Link tersalin', publishProfile: 'Buat halaman publik', publicProfile: 'Profile publik', username: 'Username', usernameHint: 'Username unik untuk shortlink Hermex.', registerTitle: 'Daftar untuk membaca detail lengkap', registerBody: 'Masuk untuk menyimpan progres lintas perangkat. Untuk MVP, Google login masih berupa opsi tampilan.', googleLogin: 'Lanjut dengan Google', email: 'Email', aiErrorTitle: 'Gagal menghubungkan AI Hermex', aiErrorBody: 'Hermes belum bisa terhubung ke provider AI. Chart kamu tetap aman; coba lagi sebentar lagi atau kembali ke chart.', retry: 'Coba lagi', historyTitle: 'History Guest', emptyHistory: 'Belum ada history di perangkat ini.', askDetail: 'Tanya detail ke Hermex', askPlaceholder: 'Contoh: kenapa karier saya condong ke edukasi?', dailyQuest: 'Daily Cosmic Quest', dailyQuestBody: 'Claim refleksi harian untuk menyimpan streak guest dan badge lokal.', claimBadge: 'Claim badge hari ini', claimedBadge: 'Quest hari ini selesai', xp: 'XP', badges: 'Badge', accountTitle: 'Profile Saya', accountGuest: 'Belum login. Kamu tetap bisa memakai Hermex sebagai guest.', currentCard: 'Kartu karakter aktif', viewCard: 'Lihat kartu karakter', logout: 'Keluar', termsTitle: 'Syarat Google OAuth', termsIntro: 'Sebelum lanjut Google login, pahami dulu cara Hermex memakai data dan batas MVP open-source ini.', termsAccept: 'Saya setuju dan lanjut', termsBack: 'Baca nanti', ethics: 'Untuk refleksi dan pengembangan diri, bukan ramalan mutlak.'
     },
     en: {
       badge: 'Alpha game', title: 'Start your tiny astrology quest.',
       subtitle: 'Enter birth context, inspect the cosmic chart, then ask Hermes for a general reflective reading.',
       name: 'Name or username', optional: 'optional', date: 'Birth date', time: 'Birth time', place: 'Birth place', citySearch: 'Search birth city',
       analyze: 'Open My Astrology', analyzing: 'Opening chart...', edit: 'Edit data', language: 'Language', selectedCity: 'Selected city',
-      locationHint: 'Latitude, longitude, and timezone influence the chart.', features: 'Things to try', home: 'Home', profile: 'Character Card', profileTab: 'Profile', chart: 'Chart Explorer', install: 'Install Hermex', installHint: 'Keep your guest chart and history easy to reopen.', installUnavailable: 'If the install prompt does not appear yet, use your browser menu: Add to Home Screen / Install app.', dismiss: 'Close', history: 'History', connect: 'Connect', hermexNav: 'Hermex AI', offlineTitle: 'Offline mode is on', offlineBody: 'You can still open saved drafts, local history, and education. AI returns when internet is back.', onlineTitle: 'Connected',
+      locationHint: 'Latitude, longitude, and timezone influence the chart.', features: 'Things to try', home: 'Home', profile: 'Character Card', profileTab: 'Profile', chart: 'Chart Explorer', install: 'Install Hermex', installHint: 'Keep your guest chart and history easy to reopen.', installUnavailable: 'If the install option does not appear, open Hermex in another browser and choose Add to Home Screen / Install app.', dismiss: 'Close', history: 'History', connect: 'Connect', hermexNav: 'Hermex AI', skyNews: 'Sky News', offlineTitle: 'Offline mode is on', offlineBody: 'You can still open saved drafts, local history, and education. AI returns when internet is back.', onlineTitle: 'Connected',
       askHermes: 'My Cosmic Analysis', validating: 'Confidence key', validate: 'Answer quick validation', processingTitle: 'Hermes is reading your chart',
       processingBody: 'Combining planets, zodiac, houses, aspects, and your selected language.', hermes: 'My Cosmic Analysis', summary: 'Summary',
       strengths: 'Strengths', weaknesses: 'Weaknesses', love: 'Love', interests: 'Interests', talents: 'Talents', career: 'Career Paths', fiveYear: 'Last 5-Year Roadmap',
-      back: 'Back to chart', askAgain: 'Ask Hermes again', learn: 'Learn Astrology', register: 'Register for full explanation', feedback: 'How accurate did this feel?', suggestion: 'Suggestions and feedback (optional)', sendFeedback: 'Send feedback', share: 'Share guest profile', copied: 'Link copied', registerTitle: 'Register to read the full detail', registerBody: 'Sign in to keep progress across devices. For this MVP, Google login is a visual option.', googleLogin: 'Continue with Google', email: 'Email', aiErrorTitle: 'Could not connect Hermex AI', aiErrorBody: 'Hermes could not reach the AI provider. Your chart is safe; try again in a moment or return to the chart.', retry: 'Retry', historyTitle: 'Guest History', emptyHistory: 'No local history on this device yet.', askDetail: 'Ask Hermex for detail', askPlaceholder: 'Example: why does my career lean toward education?', dailyQuest: 'Daily Cosmic Quest', dailyQuestBody: 'Claim a daily reflection to keep local guest streaks and badges.', claimBadge: 'Claim today badge', claimedBadge: 'Today quest complete', xp: 'XP', badges: 'Badges', accountTitle: 'My Profile', accountGuest: 'Not signed in yet. You can still use Hermex as a guest.', currentCard: 'Active character card', viewCard: 'View character card', logout: 'Logout', termsTitle: 'Google OAuth Terms', termsIntro: 'Before continuing with Google login, review how Hermex uses data and the current open-source MVP boundary.', termsAccept: 'I agree and continue', termsBack: 'Read later', ethics: 'For reflection and self-development, not deterministic prediction.'
+      back: 'Back to chart', askAgain: 'Ask Hermes again', learn: 'Learn Astrology', register: 'Register for full explanation', feedback: 'How accurate did this feel?', suggestion: 'Suggestions and feedback (optional)', sendFeedback: 'Send feedback', share: 'Publish astrology profile', copied: 'Link copied', publishProfile: 'Create public page', publicProfile: 'Public profile', username: 'Username', usernameHint: 'Unique username for your Hermex shortlink.', registerTitle: 'Register to read the full detail', registerBody: 'Sign in to keep progress across devices. For this MVP, Google login is a visual option.', googleLogin: 'Continue with Google', email: 'Email', aiErrorTitle: 'Could not connect Hermex AI', aiErrorBody: 'Hermes could not reach the AI provider. Your chart is safe; try again in a moment or return to the chart.', retry: 'Retry', historyTitle: 'Guest History', emptyHistory: 'No local history on this device yet.', askDetail: 'Ask Hermex for detail', askPlaceholder: 'Example: why does my career lean toward education?', dailyQuest: 'Daily Cosmic Quest', dailyQuestBody: 'Claim a daily reflection to keep local guest streaks and badges.', claimBadge: 'Claim today badge', claimedBadge: 'Today quest complete', xp: 'XP', badges: 'Badges', accountTitle: 'My Profile', accountGuest: 'Not signed in yet. You can still use Hermex as a guest.', currentCard: 'Active character card', viewCard: 'View character card', logout: 'Logout', termsTitle: 'Google OAuth Terms', termsIntro: 'Before continuing with Google login, review how Hermex uses data and the current open-source MVP boundary.', termsAccept: 'I agree and continue', termsBack: 'Read later', ethics: 'For reflection and self-development, not deterministic prediction.'
     }
   } satisfies Record<Lang, Record<string, string>>;
 
@@ -58,6 +58,7 @@
   let quoteIndex = 0;
   let rating = 0;
   let feedbackText = '';
+  let feedbackSent = false;
   let display_name = 'Wauputra';
   let birth_date = '1997-06-19';
   let birth_time = '17:45';
@@ -88,6 +89,17 @@
   let termsAccepted = false;
   let authUser: AuthUser | null = null;
   let authChecked = false;
+  let accountSyncDone = false;
+  let accountStatus = '';
+  let formStep = 0;
+  let usernameInput = '';
+  let publicProfile: any = null;
+  let publicProfiles: any[] = [];
+  let publicProfileStatus = '';
+  let publishLoading = false;
+  let skyPosts: any[] = [];
+  let skyCalendar: any[] = [];
+  let selectedSkyPost: any = null;
 
   $: copy = t[lang];
 
@@ -155,18 +167,21 @@
   $: features = lang === 'id'
     ? [
         ['Natal Chart', 'Lihat zodiac sign, planet, house, dan aspect.'],
-        ['Hermes AI', 'Analisis ringkas berbasis chart, bukan teks random.'],
+        ['Hermes AI', 'Coming soon: tanya detail setelah flow donasi/subscription siap.'],
         ['Minat & Bakat', 'Pisahkan kekuatan, kelemahan, dan arah eksplorasi.'],
         ['Roadmap 5 Tahun', 'Peta umum untuk dicoba bertahap.'],
         ['Jodoh Similarity', 'Coming soon: cari kecocokan relasi dari dua chart astrology.']
       ]
     : [
         ['Natal Chart', 'Inspect zodiac signs, planets, houses, and aspects.'],
-        ['Hermes AI', 'Concise chart-based interpretation, not random text.'],
+        ['Hermes AI', 'Coming soon: deeper chat after donation/subscription is ready.'],
         ['Interests & Talents', 'Separate strengths, weaknesses, and explorations.'],
         ['5-Year Roadmap', 'A general path to test gradually.'],
         ['Partner Similarity', 'Coming soon: compare relationship compatibility from two astrology charts.']
       ];
+  $: formSteps = lang === 'id'
+    ? ['Data lahir', 'Lokasi lahir', 'Identitas guest']
+    : ['Birth data', 'Birth place', 'Guest identity'];
   $: filteredCities = cityOptions.filter((city) => city.label.toLowerCase().includes(cityQuery.toLowerCase())).slice(0, 8);
   $: planets = profile ? Object.entries(profile.chart?.planets ?? {}) as [string, any][] : [];
   $: aspects = profile?.chart?.aspects ?? [];
@@ -178,6 +193,8 @@
   $: houses = profile?.chart?.houses ?? {};
   $: oracle = interpretation ? normalizeInterpretation(interpretation) : null;
   $: summaryHighlight = oracle ? highlightSummary(oracle.summary) : { lead: '', rest: '' };
+  $: keyTakeaways = oracle ? [oracle.strengths[0], oracle.weaknesses[0], oracle.careers[0]].filter(Boolean) : [];
+  $: latestSkyPost = skyPosts[0];
   $: dailyQuestDone = gameState.dailyQuestDate === new Date().toISOString().slice(0, 10);
 
   onMount(() => {
@@ -191,6 +208,7 @@
         birth_time = saved.birth_time ?? birth_time;
         birth_place = saved.birth_place ?? birth_place;
         email = saved.email ?? email;
+        usernameInput = saved.usernameInput ?? usernameInput;
         cityQuery = saved.cityQuery ?? cityQuery;
         selectedCity = saved.selectedCity ?? selectedCity;
       } catch { /* ignore broken local draft */ }
@@ -203,9 +221,14 @@
     storageReady = true;
     const params = new URLSearchParams(window.location.search);
     const sharedProfile = params.get('profile');
+    const publicUsername = params.get('u');
     const authStatus = params.get('auth');
     if (authStatus?.startsWith('google')) screen = 'account';
     loadAuthUser();
+    loadSkyNews();
+    if (publicUsername) {
+      openPublicProfile(publicUsername);
+    }
     if (sharedProfile) {
       getProfile(sharedProfile).then((loaded) => {
         profile = loaded;
@@ -259,6 +282,14 @@
     }
     return JSON.stringify(value);
   }
+  function publicSummary(value: unknown): string {
+    return displayValue(value)
+      .replace(/^Anda adalah individu dengan/i, 'Individu ini menunjukkan')
+      .replace(/^Anda adalah/i, 'Profil ini menunjukkan')
+      .replace(/^Anda memiliki/i, 'Individu ini memiliki')
+      .replace(/^Anda\b/i, 'Individu ini')
+      .replace(/^Kamu\b/i, 'Individu ini');
+  }
   function asList(value: unknown): string[] { if (Array.isArray(value)) return value.map(displayValue).filter(Boolean); if (value) return [displayValue(value)]; return []; }
   function normalizeInterpretation(result: any) {
     const data = result?.interpretation ?? {};
@@ -309,6 +340,7 @@
     try {
       const result = await getAuthMe();
       authUser = result.authenticated ? result.user : null;
+      if (authUser) await syncLocalHistoryToAccount();
     } catch {
       authUser = null;
     } finally {
@@ -316,9 +348,102 @@
     }
   }
   function logoutGoogle() {
+    authUser = null;
+    accountSyncDone = false;
+    accountStatus = '';
+    storageReady = false;
+    profile = null;
+    interpretation = null;
+    validation = null;
+    publicProfile = null;
+    email = '';
+    usernameInput = '';
+    shareLink = '';
+    guestHistory = [];
+    localStorage.removeItem('hermex_guest_history');
+    localStorage.removeItem('hermex_guest_draft');
     window.location.href = `${API_BASE}/api/v1/auth/logout`;
   }
-  function rememberGuest(nextProfile: any) {
+  async function syncLocalHistoryToAccount() {
+    if (accountSyncDone) return;
+    accountSyncDone = true;
+    const profileIds = Array.from(new Set([
+      ...guestHistory.map((item) => item.profile_id),
+      profile?.profile_id
+    ].filter(Boolean)));
+    try {
+      if (profileIds.length) await syncUserHistory(profileIds as string[]);
+      const result = await getUserHistory();
+      guestHistory = result.history.map((item: any) => ({
+        profile_id: item.profile_id,
+        display_name: item.display_name,
+        birth_place: item.birth_place,
+        created_at: item.created_at,
+        dominant: item.dominant,
+        profile: item.profile,
+        interpretation: item.interpretation,
+        interpretation_id: item.interpretation?.interpretation_id,
+        updated_at: item.linked_at
+      }));
+      localStorage.setItem('hermex_guest_history', JSON.stringify(guestHistory));
+      if (guestHistory[0] && !profile) {
+        profile = guestHistory[0].profile;
+        interpretation = guestHistory[0].interpretation ?? null;
+      }
+      accountStatus = lang === 'id' ? 'History guest sudah terhubung ke akun Google.' : 'Guest history is linked to your Google account.';
+    } catch {
+      accountStatus = lang === 'id' ? 'Login aktif, tapi sync history belum berhasil.' : 'Login is active, but history sync has not completed.';
+    }
+  }
+  async function removeHistoryItem(item: GuestHistoryItem) {
+    if (authUser) await deleteUserHistory(item.profile_id).catch(() => undefined);
+    guestHistory = guestHistory.filter((entry) => entry.profile_id !== item.profile_id);
+    localStorage.setItem('hermex_guest_history', JSON.stringify(guestHistory));
+    if (profile?.profile_id === item.profile_id) {
+      profile = null;
+      interpretation = null;
+      screen = 'account';
+    }
+  }
+  function safeUsername(value: string) {
+    return value.toLowerCase().trim().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32);
+  }
+  async function loadSkyNews() {
+    try {
+      const result: any = await getSkyNews();
+      skyPosts = result.posts ?? [];
+    } catch {
+      skyPosts = [];
+    }
+    try {
+      const result: any = await getSkyCalendar();
+      skyCalendar = result.events ?? [];
+    } catch {
+      skyCalendar = [];
+    }
+  }
+  async function openConnect() {
+    screen = 'connect';
+    try {
+      const result: any = await listPublicProfiles();
+      publicProfiles = result.profiles ?? [];
+    } catch {
+      publicProfiles = [];
+    }
+  }
+  async function openPublicProfile(username: string) {
+    try {
+      publicProfile = await getPublicProfile(username);
+      profile = publicProfile.profile;
+      interpretation = publicProfile.latest_interpretation;
+      if (profile) rememberGuest(profile, interpretation);
+      screen = 'public-profile';
+    } catch (err) {
+      publicProfileStatus = err instanceof Error ? err.message : 'Unknown error';
+      screen = 'connect';
+    }
+  }
+  function rememberGuest(nextProfile: any, nextInterpretation: any = interpretation) {
     if (!nextProfile?.profile_id) return;
     const item = {
       profile_id: nextProfile.profile_id,
@@ -326,7 +451,10 @@
       birth_place: nextProfile.birth_place,
       created_at: nextProfile.created_at,
       dominant: nextProfile.traits?.dominant_element ?? '-',
-      profile: nextProfile
+      profile: nextProfile,
+      interpretation: nextInterpretation,
+      interpretation_id: nextInterpretation?.interpretation_id,
+      updated_at: new Date().toISOString()
     };
     guestHistory = [item, ...guestHistory.filter((entry) => entry.profile_id !== item.profile_id)].slice(0, 12);
     localStorage.setItem('hermex_guest_history', JSON.stringify(guestHistory));
@@ -347,21 +475,53 @@
   }
   async function shareProfile() {
     if (!profile?.profile_id) return;
-    const link = `${window.location.origin}${window.location.pathname}?profile=${profile.profile_id}`;
+    const username = safeUsername(usernameInput || display_name || profile.display_name || '');
+    if (!email.trim() || username.length < 3) {
+      publicProfileStatus = lang === 'id' ? 'Isi email dan username unik dulu untuk membuat halaman publik.' : 'Add email and a unique username first to create a public page.';
+      screen = 'connect';
+      return;
+    }
+    publishLoading = true;
+    publicProfileStatus = '';
+    try {
+      const result: any = await publishPublicProfile({
+        profile_id: profile.profile_id,
+        username,
+        email,
+        display_name: display_name || profile.display_name,
+        bio: lang === 'id' ? 'Profil astrology reflektif dari Hermex Quest.' : 'Reflective astrology profile from Hermex Quest.'
+      });
+      publicProfile = result.public_profile;
+      usernameInput = publicProfile.username;
+      const list: any = await listPublicProfiles().catch(() => ({ profiles: [] }));
+      publicProfiles = list.profiles ?? [];
+    } catch (err) {
+      publicProfileStatus = err instanceof Error ? err.message : 'Unknown error';
+      return;
+    } finally {
+      publishLoading = false;
+    }
+    const link = `${window.location.origin}/@${usernameInput}`;
     shareLink = link;
     let copied = false;
     if (navigator.share) {
-      await navigator.share({ title: 'Hermex Quest', text: 'Coba lihat chart Hermex guest ini.', url: link }).then(() => (copied = true)).catch(() => undefined);
+      await navigator.share({ title: 'Hermex Quest', text: 'Coba lihat profile astrology Hermex ini.', url: link }).then(() => (copied = true)).catch(() => undefined);
     }
     if (!copied && navigator.clipboard) {
       await navigator.clipboard.writeText(link).then(() => (copied = true)).catch(() => undefined);
     }
     shareStatus = copied ? copy.copied : (lang === 'id' ? 'Salin link di bawah ini' : 'Copy the link below');
+    screen = 'public-profile';
     window.setTimeout(() => (shareStatus = ''), 1600);
   }
   async function submitFeedback() {
     if (!rating) return;
-    await submitFeedbackApi({ profile_id: profile?.profile_id, interpretation_id: interpretation?.interpretation_id, rating, message: feedbackText, source: 'pwa' }).catch(() => undefined);
+    try {
+      await submitFeedbackApi({ profile_id: profile?.profile_id, interpretation_id: interpretation?.interpretation_id, rating, message: feedbackText, source: 'pwa' });
+      feedbackSent = true;
+    } catch {
+      return;
+    }
     feedbackText = '';
     rating = 0;
   }
@@ -384,7 +544,8 @@
   }
   function openHistoryItem(item: GuestHistoryItem) {
     profile = item.profile;
-    screen = 'profile';
+    interpretation = item.interpretation ?? null;
+    screen = interpretation ? 'hermes' : 'profile';
   }
 
   function escapeHtml(value: string) {
@@ -400,7 +561,7 @@
   }
 
   $: if (storageReady) {
-    localStorage.setItem('hermex_guest_draft', JSON.stringify({ display_name, birth_date, birth_time, birth_place, email, cityQuery, selectedCity }));
+    localStorage.setItem('hermex_guest_draft', JSON.stringify({ display_name, birth_date, birth_time, birth_place, email, usernameInput, cityQuery, selectedCity }));
   }
 
   async function runAnalysis() {
@@ -419,13 +580,14 @@
   }
   async function runInterpretation() {
     if (!profile) return;
-    loading = true; screen = 'hermes-loading'; error = '';
+    loading = true; screen = 'hermes-loading'; error = ''; feedbackSent = false;
     try {
       interpretation = await interpretProfile(profile.profile_id, lang);
       if (String(interpretation?.provider ?? '').includes('error')) {
         error = copy.aiErrorBody;
         screen = 'ai-error';
       } else {
+        rememberGuest(profile, interpretation);
         screen = 'hermes';
       }
     }
@@ -443,26 +605,26 @@
       {#if screen !== 'home'}<button class="ghost" on:click={() => (screen = 'home')}>{copy.edit}</button>{/if}<button class="lang" on:click={toggleLang}>{lang.toUpperCase()}</button>
     </header>
 
-    <nav class="bottom-nav"><button class:active={screen === 'home'} on:click={() => (screen = 'home')}>⌂<span>{copy.home}</span></button><button class:active={screen === 'account'} on:click={() => (screen = 'account')}>✦<span>{copy.profileTab}</span></button><button class:active={screen === 'connect'} on:click={() => (screen = 'connect')}>↗<span>{copy.connect}</span></button><button class:active={screen === 'hermes-chat'} on:click={() => (screen = 'hermes-chat')}>☿<span>{copy.hermexNav}</span></button></nav>
+    <nav class="bottom-nav"><button class:active={screen === 'home'} on:click={() => (screen = 'home')}>⌂<span>{copy.home}</span></button><button class:active={screen === 'account'} on:click={() => (screen = 'account')}>✦<span>{copy.profileTab}</span></button><button class:active={screen === 'connect'} on:click={openConnect}>↗<span>{copy.connect}</span></button><button class:active={screen === 'hermes-chat'} on:click={() => (screen = 'hermes-chat')}>☿<span>{copy.hermexNav}</span></button></nav>
 
     {#if screen === 'home'}
       <section class="hero-card"><div><span>{copy.features}</span><h1>{copy.title}</h1><p>{copy.subtitle}</p></div><svg viewBox="0 0 220 220"><circle cx="110" cy="110" r="82"/><circle cx="110" cy="110" r="50"/><path d="M138 47a31 31 0 1 0 0 62 38 38 0 1 1 0-62z"/><circle cx="49" cy="83" r="13"/><circle cx="171" cy="148" r="16"/><path d="M101 128l8 18 18 8-18 8-8 18-8-18-18-8 18-8 8-18z"/></svg></section>
       {#if !installDismissed}<div class="install-badge show"><button type="button" on:click={installApp}>⬇ {copy.install}<small>{installMessage || copy.installHint}</small></button><button class="install-close" type="button" aria-label={copy.dismiss} on:click={dismissInstallBadge}>×</button></div>{/if}
       {#if !isOnline}<section class="offline-banner"><strong>☁ {copy.offlineTitle}</strong><span>{copy.offlineBody}</span></section>{/if}
       <section class="feature-row">{#each features as feature, index}<button class:active={activeFeature === index} on:click={() => (activeFeature = index)}>{@render Icon(index)}<strong>{feature[0]}</strong><small>{feature[1]}</small></button>{/each}</section>
-      <button class="learn-strip" on:click={() => (screen = 'learn')}>☿ {copy.learn}</button>
-      <section class="game-card"><div>{@render Icon(3)}<div><h2>{copy.dailyQuest}</h2><p>{copy.dailyQuestBody}</p></div></div><div class="game-stats"><span>{copy.xp}: {gameState.xp}</span><span>Streak: {gameState.streak}</span><span>{copy.badges}: {gameState.badges.length}</span></div>{#if gameState.badges.length}<div class="badge-row">{#each gameState.badges as badge}<span>✦ {badge}</span>{/each}</div>{/if}<button class="soft-action oracle-button" disabled={dailyQuestDone} on:click={completeDailyQuest}>{dailyQuestDone ? copy.claimedBadge : copy.claimBadge}</button>{#if gameMessage}<small>{gameMessage}</small>{/if}</section>
-      <section class="home-grid single"><article class="card form-card"><div class="section-title"><span>01</span><h2>Profil Pemain</h2></div>
-        <div class="split"><label>{copy.date}<input type="date" bind:value={birth_date} /></label><label>{copy.time} <small>{copy.optional}</small><input type="time" bind:value={birth_time} /><small class="field-hint">{lang === 'id' ? 'Semakin detail, house dan aspek chart makin akurat.' : 'More detail improves houses and chart precision.'}</small></label></div>
-        <label class="city-picker">{copy.place}<input value={cityQuery} placeholder={copy.citySearch} autocomplete="off" role="combobox" aria-controls="city-options" aria-expanded={cityPickerOpen ? 'true' : 'false'} on:focus={() => (cityPickerOpen = true)} on:input={(event) => onCityInput(event.currentTarget.value)} />{#if cityPickerOpen && filteredCities.length}<div class="city-menu" id="city-options">{#each filteredCities as city}<button type="button" on:mousedown|preventDefault={() => chooseCity(city)}><strong>{city.label}</strong><small>{city.latitude.toFixed(4)}, {city.longitude.toFixed(4)} · {city.timezone}</small></button>{/each}</div>{/if}</label>
-        {#if selectedCity}<p class="location-note">{copy.selectedCity}: {selectedCity.label}<br />{copy.locationHint}</p>{/if}
-        <label>{copy.email} <small>{copy.optional}</small><input type="email" bind:value={email} placeholder="you@example.com" /></label>
-        <label>{copy.name} <small>{copy.optional}</small><input bind:value={display_name} /></label>
-        <button class="primary-action" on:click={runAnalysis} disabled={loading}>✦ {loading ? copy.analyzing : copy.analyze}</button>{#if error}<p class="error">{error}</p>{/if}
+      <nav class="knowledge-nav"><button on:click={() => (screen = 'learn')}>☿ {copy.learn}</button><button on:click={() => (screen = 'sky-news')}>☾ {copy.skyNews}</button></nav>
+      {#if latestSkyPost}<section class="latest-sky"><small>{lang === 'id' ? 'Latest Berita Langit' : 'Latest Sky News'}</small><h2>{latestSkyPost.title}</h2><p>{latestSkyPost.summary}</p><a href={`/berita-langit/${latestSkyPost.slug}`}>{lang === 'id' ? 'Baca article' : 'Read article'}</a></section>{/if}
+      <section class="home-grid single"><article class="card form-card quest-form"><div class="section-title"><span>01</span><h2>Profil Pemain</h2></div>
+        <div class="quest-steps">{#each formSteps as step, index}<button class:active={formStep === index} on:click={() => (formStep = index)}><span>{index + 1}</span>{step}</button>{/each}</div>
+        {#if formStep === 0}<div class="split"><label>{copy.date}<input type="date" bind:value={birth_date} /></label><label>{copy.time} <small>{copy.optional}</small><input type="time" bind:value={birth_time} /><small class="field-hint">{lang === 'id' ? 'Semakin detail, house dan aspek chart makin akurat.' : 'More detail improves houses and chart precision.'}</small></label></div>{/if}
+        {#if formStep === 1}<label class="city-picker">{copy.place}<input value={cityQuery} placeholder={copy.citySearch} autocomplete="off" role="combobox" aria-controls="city-options" aria-expanded={cityPickerOpen ? 'true' : 'false'} on:focus={() => (cityPickerOpen = true)} on:input={(event) => onCityInput(event.currentTarget.value)} />{#if cityPickerOpen && filteredCities.length}<div class="city-menu" id="city-options">{#each filteredCities as city}<button type="button" on:mousedown|preventDefault={() => chooseCity(city)}><strong>{city.label}</strong><small>{city.latitude.toFixed(4)}, {city.longitude.toFixed(4)} · {city.timezone}</small></button>{/each}</div>{/if}</label>{#if selectedCity}<p class="location-note">{copy.selectedCity}: {selectedCity.label}<br />{copy.locationHint}</p>{/if}{/if}
+        {#if formStep === 2}<label>{copy.email} <small>{copy.optional}</small><input type="email" bind:value={email} placeholder="you@example.com" /></label><label>{copy.name} <small>{copy.optional}</small><input bind:value={display_name} on:input={() => { if (!usernameInput) usernameInput = safeUsername(display_name); }} /></label><label>{copy.username} <small>{copy.optional}</small><input bind:value={usernameInput} placeholder="wauputra" on:input={() => (usernameInput = safeUsername(usernameInput))} /><small class="field-hint">{copy.usernameHint}</small></label>{/if}
+        <div class="route-actions">{#if formStep > 0}<button class="soft-action" on:click={() => (formStep = Math.max(0, formStep - 1))}>{copy.back}</button>{/if}{#if formStep < 2}<button class="primary-action" on:click={() => (formStep = Math.min(2, formStep + 1))}>{lang === 'id' ? 'Lanjut quest' : 'Next quest'}</button>{:else}<button class="primary-action" on:click={runAnalysis} disabled={loading}>✦ {loading ? copy.analyzing : copy.analyze}</button>{/if}</div>{#if error}<p class="error">{error}</p>{/if}
       </article></section>
     {/if}
 
-    {#if screen === 'account'}<section class="card account-page"><div class="section-title"><span>✦</span><h2>{copy.accountTitle}</h2></div><div class="account-hero">{#if authUser}<div class="account-id">{#if authUser.picture}<img src={authUser.picture} alt="" />{:else}<span>{(authUser.name || authUser.email || 'G').slice(0, 1)}</span>{/if}<div><strong>{authUser.name || 'Google User'}</strong><small>{authUser.email}</small></div></div><button class="share-action" on:click={logoutGoogle}>{copy.logout}</button>{:else}<p>{authChecked ? copy.accountGuest : copy.analyzing}</p><button class="google-action" on:click={startGoogleLogin}>G {copy.googleLogin}</button>{/if}</div><div class="account-grid"><article><h3>{copy.currentCard}</h3>{#if profile}<p><strong>{profile.display_name || 'Guest'}</strong> · {profile.traits.dominant_element}</p><div class="chips compact">{#each profile.traits.interests as item}<span>{item}</span>{/each}</div><button class="soft-action oracle-button" on:click={() => (screen = 'profile')}>{copy.viewCard}</button>{:else}<p>{lang === 'id' ? 'Belum ada chart aktif. Buka Astrologyku dulu untuk membuat kartu karakter.' : 'No active chart yet. Open your astrology first to create a character card.'}</p><button class="soft-action oracle-button" on:click={() => (screen = 'home')}>{copy.analyze}</button>{/if}</article><article><h3>{copy.historyTitle}</h3>{#if guestHistory.length}<div class="history-list mini">{#each guestHistory.slice(0, 4) as item}<button on:click={() => openHistoryItem(item)}><strong>{item.display_name || 'Guest'}</strong><span>{item.birth_place}</span><small>{item.dominant} · {new Date(item.created_at).toLocaleDateString()}</small></button>{/each}</div><button class="share-action" on:click={() => (screen = 'history')}>{copy.history}</button>{:else}<p>{copy.emptyHistory}</p>{/if}</article></div></section>{/if}
+    {#if screen === 'account'}<section class="card account-page"><div class="section-title"><span>✦</span><h2>{copy.accountTitle}</h2></div><div class="account-hero">{#if authUser}<div class="account-id">{#if authUser.picture}<img src={authUser.picture} alt="" />{:else}<span>{(authUser.name || authUser.email || 'G').slice(0, 1)}</span>{/if}<div><strong>{authUser.name || 'Google User'}</strong><small>{authUser.email}</small></div></div>{#if accountStatus}<small>{accountStatus}</small>{/if}<button class="share-action" on:click={logoutGoogle}>{copy.logout}</button>{:else}<p>{authChecked ? copy.accountGuest : copy.analyzing}</p><button class="google-action" on:click={startGoogleLogin}>G {copy.googleLogin}</button>{/if}</div><div class="account-grid"><article><h3>{copy.currentCard}</h3>{#if profile}<p><strong>{profile.display_name || 'Guest'}</strong> · {profile.traits.dominant_element}</p><div class="chips compact">{#each profile.traits.interests as item}<span>{item}</span>{/each}</div><button class="soft-action oracle-button" on:click={() => (screen = 'profile')}>{copy.viewCard}</button>{:else}<p>{lang === 'id' ? 'Belum ada chart aktif. Buka Astrologyku dulu untuk membuat kartu karakter.' : 'No active chart yet. Open your astrology first to create a character card.'}</p><button class="soft-action oracle-button" on:click={() => (screen = 'home')}>{copy.analyze}</button>{/if}</article><article><h3>{copy.historyTitle}</h3>{#if guestHistory.length}<div class="history-list mini">{#each guestHistory.slice(0, 4) as item}<article class="history-entry"><button on:click={() => openHistoryItem(item)}><strong>{item.display_name || 'Guest'}</strong><span>{item.birth_place}</span><small>{item.dominant} · {item.interpretation ? 'AI saved' : 'chart only'} · {new Date(item.created_at).toLocaleDateString()}</small></button><button class="delete-history" on:click={() => removeHistoryItem(item)}>{lang === 'id' ? 'Hapus' : 'Delete'}</button></article>{/each}</div><button class="share-action" on:click={() => (screen = 'history')}>{copy.history}</button>{:else}<p>{copy.emptyHistory}</p>{/if}</article><article><h3>{copy.publicProfile}</h3><p>{lang === 'id' ? 'Buat halaman publik seperti shortlink bio astrology agar muncul di Connect.' : 'Create a public astrology bio shortlink so it appears in Connect.'}</p><button class="share-action" on:click={openConnect}>↗ {copy.connect}</button></article></div></section>{/if}
+    {#if screen === 'account'}<section class="game-card account-quest"><div>{@render Icon(3)}<div><h2>{copy.dailyQuest}</h2><p>{copy.dailyQuestBody}</p></div></div><div class="game-stats"><span>{copy.xp}: {gameState.xp}</span><span>Streak: {gameState.streak}</span><span>{copy.badges}: {gameState.badges.length}</span></div>{#if gameState.badges.length}<div class="badge-row">{#each gameState.badges as badge}<span>✦ {badge}</span>{/each}</div>{/if}<button class="soft-action oracle-button" disabled={dailyQuestDone} on:click={completeDailyQuest}>{dailyQuestDone ? copy.claimedBadge : copy.claimBadge}</button>{#if gameMessage}<small>{gameMessage}</small>{/if}</section>{/if}
 
     {#if screen === 'profile' && profile}
       <section class="profile-grid"><article class="card character-card"><div class="section-title"><span>02</span><h2>{copy.profile}</h2></div><div class="natal-wheel"><svg viewBox="0 0 300 300"><circle cx="150" cy="150" r="132"/><circle cx="150" cy="150" r="96"/><circle cx="150" cy="150" r="44"/>{#each Array(12) as _, index}<line x1="150" y1="18" x2="150" y2="54" transform={`rotate(${index * 30} 150 150)`}/>{/each}{#each chartLines as line}<line class="aspect-line" x1={line.left.x} y1={line.left.y} x2={line.right.x} y2={line.right.y}/>{/each}{#each planets.slice(0, 12) as [name, planet]}{@const point = planetPoint(name)}{#if point}<g><circle cx={point.x} cy={point.y} r="10"/><text x={point.x} y={point.y - 15}>{name.slice(0, 2)}</text></g>{/if}{/each}</svg></div><h3>{profile.display_name || 'Seeker'}</h3><p class="dominant">{profile.traits.dominant_element}</p><div class="meter"><span style={`width:${Math.round(profile.traits.confidence.score * 100)}%`}></span></div><p>{profile.traits.confidence.label} ({profile.traits.confidence.score})</p><div class="chips">{#each profile.traits.interests as item}<span>{item}</span>{/each}</div>{#if profile.needs_validation}<button class="soft-action" on:click={runValidation}>{copy.validate}</button>{/if}</article>
@@ -471,7 +633,7 @@
 
     {#if screen === 'hermes-loading'}<section class="loading-screen"><div class="loader"><span></span><span></span><span></span><strong>☿</strong></div><h2>{copy.processingTitle}</h2><p class="quote">{quotes[quoteIndex]}</p><small>{copy.processingBody}</small></section>{/if}
 
-    {#if screen === 'hermes' && oracle}<section class="card hermes-card"><div class="section-title"><span>04</span><h2>{copy.hermes}</h2></div><div class="summary-card">{@render Icon(1)}<p><mark>{summaryHighlight.lead}</mark>{#if summaryHighlight.rest}<br /><span>{summaryHighlight.rest}</span>{/if}</p></div><div class="insight-grid">{@render Insight(copy.love, oracle.love, '♡')}{@render Insight(copy.strengths, oracle.strengths, '✦')}{@render Insight(copy.weaknesses, oracle.weaknesses, '△')}{@render Insight(copy.interests, oracle.interests, '☉')}{@render Insight(copy.talents, oracle.talents, '☾')}{@render Insight(copy.career, oracle.careers, '☿')}</div><div class="timeline"><h3>{copy.fiveYear}</h3>{#each oracle.fiveYear.slice(0, 5) as item, index}<div><span>{roadmapTitle(item, index)}</span><p>{roadmapText(item)}</p></div>{/each}<button class="text-link" on:click={explainMore}>{copy.register}</button></div><div class="feedback"><h3>{copy.feedback}</h3><div class="stars">{#each [1,2,3,4,5] as star}<button class:active={rating >= star} on:click={() => (rating = star)}>★</button>{/each}</div><textarea bind:value={feedbackText} placeholder={copy.suggestion}></textarea><button class="soft-action" on:click={submitFeedback}>{copy.sendFeedback}</button><button class="share-action" on:click={shareProfile}>↗ {copy.share}</button>{#if shareStatus}<small>{shareStatus}</small>{/if}{#if shareLink}<input class="share-link" readonly value={shareLink} on:focus={(event) => event.currentTarget.select()} />{/if}</div><div class="route-actions"><button class="soft-action" on:click={() => (screen = 'profile')}>{copy.back}</button><button class="soft-action oracle-button" on:click={runInterpretation}>{copy.askAgain}</button></div></section>{/if}
+    {#if screen === 'hermes' && oracle}<section class="card hermes-card"><div class="section-title"><span>04</span><h2>{copy.hermes}</h2></div><div class="summary-card">{@render Icon(1)}<p><mark>{summaryHighlight.lead}</mark>{#if summaryHighlight.rest}<br /><span>{summaryHighlight.rest}</span>{/if}</p></div>{#if keyTakeaways.length}<div class="takeaway-row">{#each keyTakeaways as item}<span>✦ {item}</span>{/each}</div>{/if}<div class="insight-grid">{@render Insight(copy.love, oracle.love, '♡')}{@render Insight(copy.strengths, oracle.strengths, '✦')}{@render Insight(copy.weaknesses, oracle.weaknesses, '△')}{@render Insight(copy.interests, oracle.interests, '☉')}{@render Insight(copy.talents, oracle.talents, '☾')}{@render Insight(copy.career, oracle.careers, '☿')}</div><div class="timeline"><h3>{copy.fiveYear}</h3>{#each oracle.fiveYear.slice(0, 5) as item, index}<div><span>{roadmapTitle(item, index)}</span><p>{roadmapText(item)}</p></div>{/each}<button class="text-link" on:click={explainMore}>{copy.register}</button></div>{#if !feedbackSent}<div class="feedback"><h3>{copy.feedback}</h3><div class="stars">{#each [1,2,3,4,5] as star}<button class:active={rating >= star} on:click={() => (rating = star)}>★</button>{/each}</div><textarea bind:value={feedbackText} placeholder={copy.suggestion}></textarea><button class="soft-action" on:click={submitFeedback}>{copy.sendFeedback}</button><button class="share-action" on:click={shareProfile}>↗ {publishLoading ? copy.analyzing : copy.share}</button>{#if publicProfileStatus}<small>{publicProfileStatus}</small>{/if}{#if shareStatus}<small>{shareStatus}</small>{/if}{#if shareLink}<input class="share-link" readonly value={shareLink} on:focus={(event) => event.currentTarget.select()} />{/if}</div>{:else}<div class="feedback-done">✦ {lang === 'id' ? 'Feedback tersimpan. Terima kasih.' : 'Feedback saved. Thank you.'}</div><div class="feedback share-only"><button class="share-action" on:click={shareProfile}>↗ {publishLoading ? copy.analyzing : copy.share}</button>{#if publicProfileStatus}<small>{publicProfileStatus}</small>{/if}{#if shareStatus}<small>{shareStatus}</small>{/if}{#if shareLink}<input class="share-link" readonly value={shareLink} on:focus={(event) => event.currentTarget.select()} />{/if}</div>{/if}<div class="route-actions"><button class="soft-action" on:click={() => (screen = 'profile')}>{copy.back}</button><button class="soft-action oracle-button" on:click={runInterpretation}>{copy.askAgain}</button></div></section>{/if}
 
 
 
@@ -479,9 +641,11 @@
 
     {#if screen === 'learn'}<section class="card learn-page"><div class="section-title"><span>☿</span><h2>{copy.learn}</h2></div><div class="education-grid">{#each educationCards as card, index}<button class:active={activeEducation === index} on:click={() => { activeEducation = index; screen = 'learn-detail'; }}>{@render Icon(index)}<h3>{card[0]}</h3><p>{card[1]}</p><small>{lang === 'id' ? 'Buka detail' : 'Open detail'}</small></button>{/each}</div><button class="soft-action" on:click={() => (screen = 'home')}>{copy.back}</button></section>{/if}
     {#if screen === 'learn-detail'}<section class="card learn-page detail-page"><div class="section-title"><span>☿</span><h2>{educationCards[activeEducation][0]}</h2></div><article class="education-detail">{@render Icon(activeEducation, true)}<div><p>{educationCards[activeEducation][1]}</p><p>{lang === 'id' ? 'Bayangkan ini seperti lapisan peta: planet adalah aktor, zodiac adalah gaya bicara, house adalah panggung, dan aspect adalah hubungan antar aktor.' : 'Think of this as map layers: planets are actors, zodiac signs are speaking styles, houses are stages, and aspects are relationships between actors.'}</p></div></article><div class="detail-list">{#each educationDetailRows as row}<article><strong>{row[0]}</strong><p>{row[1]}</p></article>{/each}</div><button class="soft-action" on:click={() => (screen = 'learn')}>{copy.learn}</button></section>{/if}
-    {#if screen === 'history'}<section class="card history-page"><div class="section-title"><span>⌁</span><h2>{copy.historyTitle}</h2></div>{#if guestHistory.length}<div class="history-list">{#each guestHistory as item}<button on:click={() => openHistoryItem(item)}><strong>{item.display_name || 'Guest'}</strong><span>{item.birth_place}</span><small>{item.dominant} · {new Date(item.created_at).toLocaleDateString()}</small></button>{/each}</div>{:else}<p>{copy.emptyHistory}</p>{/if}</section>{/if}
-    {#if screen === 'connect'}<section class="card connect-page"><div class="section-title"><span>↗</span><h2>{copy.connect}</h2></div><p>{lang === 'id' ? 'Bagikan profil guest sebagai ajakan mencoba Hermex. Login Google disiapkan untuk versi berikutnya.' : 'Share your guest profile as an invitation to try Hermex. Google login is prepared for the next version.'}</p><button class="google-action" on:click={startGoogleLogin}>G {copy.googleLogin}</button><button class="share-action" on:click={shareProfile}>↗ {copy.share}</button>{#if shareStatus}<small>{shareStatus}</small>{/if}{#if shareLink}<input class="share-link" readonly value={shareLink} on:focus={(event) => event.currentTarget.select()} />{/if}</section>{/if}
-    {#if screen === 'hermes-chat'}<section class="card chat-page"><div class="section-title"><span>☿</span><h2>{copy.hermexNav}</h2></div><p>{copy.askDetail}</p><textarea bind:value={detailQuestion} placeholder={copy.askPlaceholder}></textarea><button class="soft-action oracle-button" on:click={askDetail} disabled={detailLoading || !profile}>{detailLoading ? copy.analyzing : copy.askDetail}</button>{#if !profile}<p class="error">{lang === 'id' ? 'Buka Astrologyku dulu agar Hermex punya chart untuk dibaca.' : 'Open your astrology first so Hermex has a chart to read.'}</p>{/if}{#if detailAnswer}<div class="detail-answer">{@render Icon(1)}<p>{detailAnswer}</p></div>{/if}</section>{/if}
+    {#if screen === 'history'}<section class="card history-page"><div class="section-title"><span>⌁</span><h2>{copy.historyTitle}</h2></div>{#if guestHistory.length}<div class="history-list">{#each guestHistory as item}<article class="history-entry"><button on:click={() => openHistoryItem(item)}><strong>{item.display_name || 'Guest'}</strong><span>{item.birth_place}</span><small>{item.dominant} · {item.interpretation ? 'AI saved' : 'chart only'} · {new Date(item.created_at).toLocaleDateString()}</small></button><button class="delete-history" on:click={() => removeHistoryItem(item)}>{lang === 'id' ? 'Hapus riwayat' : 'Delete history'}</button></article>{/each}</div>{:else}<p>{copy.emptyHistory}</p>{/if}</section>{/if}
+    {#if screen === 'connect'}<section class="card connect-page"><div class="section-title"><span>↗</span><h2>{copy.connect}</h2></div><p>{lang === 'id' ? 'Publikasikan profil astrology seperti shortlink bio. Email dan username wajib agar link publik tidak duplikat.' : 'Publish an astrology profile like a bio shortlink. Email and username are required so public links stay unique.'}</p><div class="split"><label>{copy.email}<input type="email" bind:value={email} placeholder="you@example.com" /></label><label>{copy.username}<input bind:value={usernameInput} placeholder="wauputra" on:input={() => (usernameInput = safeUsername(usernameInput))} /><small>{copy.usernameHint}</small></label></div><button class="share-action" on:click={shareProfile}>↗ {publishLoading ? copy.analyzing : copy.publishProfile}</button>{#if publicProfileStatus}<small>{publicProfileStatus}</small>{/if}{#if shareStatus}<small>{shareStatus}</small>{/if}{#if shareLink}<input class="share-link" readonly value={shareLink} on:focus={(event) => event.currentTarget.select()} />{/if}<h3>{lang === 'id' ? 'Connect publik' : 'Public Connect'}</h3>{#if publicProfiles.length}<div class="connect-grid">{#each publicProfiles as item}<button on:click={() => openPublicProfile(item.username)}><strong>@{item.username}</strong><span>{item.display_name || 'Guest'} · {item.profile?.traits?.dominant_element}</span><small>{item.latest_interpretation ? publicSummary(item.latest_interpretation.interpretation?.summary).slice(0, 90) : 'Natal chart ready'}</small></button>{/each}</div>{:else}<p>{lang === 'id' ? 'Belum ada profile publik. Jadilah yang pertama.' : 'No public profiles yet. Be the first.'}</p>{/if}</section>{/if}
+    {#if screen === 'public-profile' && publicProfile}<section class="card public-page"><div class="section-title"><span>↗</span><h2>@{publicProfile.username}</h2></div><div class="public-hero">{@render Icon(0)}<div><h3>{publicProfile.display_name || 'Hermex Guest'}</h3><p>{publicProfile.bio || (lang === 'id' ? 'Profile astrology publik dari Hermex.' : 'Public astrology profile from Hermex.')}</p><div class="chips compact"><span>{publicProfile.profile?.traits?.dominant_element}</span>{#each (publicProfile.profile?.traits?.interests ?? []).slice(0, 3) as item}<span>{item}</span>{/each}</div></div></div>{#if publicProfile.latest_interpretation}<div class="summary-card mini">{@render Icon(1)}<p>{publicSummary(publicProfile.latest_interpretation.interpretation?.summary)}</p></div>{/if}<button class="soft-action oracle-button" on:click={() => { profile = publicProfile.profile; interpretation = publicProfile.latest_interpretation; screen = interpretation ? 'hermes' : 'profile'; }}>{lang === 'id' ? 'Buka detail astrology' : 'Open astrology detail'}</button></section>{/if}
+    {#if screen === 'sky-news'}<section class="card sky-page"><div class="section-title"><span>☾</span><h2>{copy.skyNews}</h2></div><p>{lang === 'id' ? 'Blog ringan tentang simbol langit dan cara membacanya sebagai refleksi peristiwa di bumi, bukan klaim sebab-akibat mutlak.' : 'A light blog about sky symbols and how to read them as earthly reflection, not deterministic causality.'}</p>{#if latestSkyPost}<article class="latest-sky in-page"><small>{latestSkyPost.tag}</small><h2>{latestSkyPost.title}</h2><p>{latestSkyPost.summary}</p><a href={`/berita-langit/${latestSkyPost.slug}`}>{lang === 'id' ? 'Baca latest article' : 'Read latest article'}</a></article>{/if}<div class="calendar-card"><h3>{lang === 'id' ? 'Calendar Astrology' : 'Astrology Calendar'}</h3>{#if skyCalendar.length}<div class="calendar-list">{#each skyCalendar as event}<article><time>{event.event_date}</time><strong>{event.title}</strong><span>{event.tag}</span><p>{event.summary}</p></article>{/each}</div>{:else}<p>{lang === 'id' ? 'Belum ada calendar event.' : 'No calendar events yet.'}</p>{/if}</div><div class="sky-list">{#each skyPosts as post}<article>{@render Icon(3)}<div><small>{post.tag}</small><h3>{post.title}</h3><p>{post.summary}</p><a href={`/berita-langit/${post.slug}`}>{lang === 'id' ? 'Buka article' : 'Open article'}</a></div></article>{/each}</div></section>{/if}
+    {#if screen === 'hermes-chat'}<section class="card chat-page coming-soon"><div class="section-title"><span>☿</span><h2>{copy.hermexNav}</h2></div>{@render Icon(1, true)}<h3>{lang === 'id' ? 'Coming soon: tanya Hermes lebih detail' : 'Coming soon: ask Hermes for deeper detail'}</h3><p>{lang === 'id' ? 'Fitur chat detail akan dibuka setelah flow donasi/subscription siap. Untuk sekarang, gunakan Analisis Kosmik dan simpan profile publikmu dulu.' : 'Detailed chat opens after the donation/subscription flow is ready. For now, use Cosmic Analysis and save your public profile first.'}</p><button class="soft-action oracle-button" on:click={() => (profile ? screen = 'hermes' : screen = 'home')}>{profile ? copy.askHermes : copy.analyze}</button></section>{/if}
     {#if screen === 'terms'}<section class="card terms-page"><div class="section-title"><span>§</span><h2>{copy.termsTitle}</h2></div><p>{copy.termsIntro}</p><ol><li>{lang === 'id' ? 'Google login hanya dipakai untuk identitas akun dan sinkronisasi progres ketika fitur akun aktif.' : 'Google login is used only for account identity and progress sync when accounts are enabled.'}</li><li>{lang === 'id' ? 'Data lahir dan chart dipakai untuk membuat pengalaman Hermex, bukan untuk keputusan medis, finansial, hukum, atau hidup-kritis.' : 'Birth data and charts are used to power Hermex, not for medical, financial, legal, or life-critical decisions.'}</li><li>{lang === 'id' ? 'Versi self-hosted tetap bisa berjalan penuh dengan provider AI dan storage milik sendiri.' : 'Self-hosted versions can still run fully with your own AI provider and storage.'}</li><li>{lang === 'id' ? 'Versi hosted Hermex dapat menambahkan donasi atau langganan untuk fitur premium di masa depan.' : 'Hosted Hermex may add donation or subscription access for premium features later.'}</li></ol><div class="route-actions"><button class="soft-action" on:click={() => (screen = 'register')}>{copy.termsBack}</button><button class="soft-action oracle-button" on:click={acceptTerms}>G {copy.termsAccept}</button></div></section>{/if}
     {#if screen === 'register'}<section class="card register-page"><div class="section-title"><span>✦</span><h2>{copy.registerTitle}</h2></div><p>{copy.registerBody}</p><button class="google-action" on:click={startGoogleLogin}>G {copy.googleLogin}</button><div class="split"><input placeholder="Email" /><input placeholder="Nama" /></div><button class="primary-action" on:click={() => (screen = 'hermes')}>{copy.back}</button></section>{/if}
     <footer><p>{copy.ethics}</p><div class="legal-links"><a href="/terms">Terms</a><a href="/privacy">Privacy</a></div></footer>
@@ -510,6 +674,8 @@ button.brand { border: 0; background: transparent; color: inherit; padding: 0; t
 .history-list { display: grid; gap: 12px; }
 .history-list button { border: 1px solid rgba(47,36,55,.12); border-radius: 22px; padding: 16px; background: #fffdf7; color: var(--ink); text-align: left; display: grid; gap: 4px; }
 .history-list span, .history-list small { color: var(--muted); font-weight: 800; }
+.history-entry { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: stretch; }
+.history-entry .delete-history { min-width: 104px; background: #fff0a8; color: var(--ink); text-align: center; place-items: center; font-weight: 950; }
 .detail-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 14px 0; }
 .detail-list article { border-radius: 20px; padding: 14px; background: rgba(255,253,247,.72); border: 1px solid rgba(47,36,55,.1); }
 .detail-list p { margin: 6px 0 0; color: var(--muted); font-weight: 800; }
@@ -541,9 +707,41 @@ button.brand { border: 0; background: transparent; color: inherit; padding: 0; t
 .chips.compact { justify-content: flex-start; }
 .history-list.mini { margin-top: 10px; }
 .history-list.mini button { padding: 12px; border-radius: 18px; }
+.knowledge-nav { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+.knowledge-nav button { border: 1px solid rgba(69,48,79,.1); border-radius: 999px; padding: 15px 18px; background: #fffdf7; color: var(--ink); font-weight: 950; cursor: pointer; box-shadow: 0 12px 32px rgba(82,47,79,.08); }
+.latest-sky { position: relative; z-index: 1; margin: 0 0 18px; border-radius: 28px; padding: 18px; background: linear-gradient(135deg, #fff0a8, #dcfff1); border: 1px solid rgba(69,48,79,.1); }
+.latest-sky small { color: #8f6884; font-weight: 950; text-transform: uppercase; letter-spacing: .08em; }
+.latest-sky p { color: var(--muted); font-weight: 820; }
+.latest-sky a, .sky-list a { display: inline-flex; margin-top: 8px; border-radius: 999px; padding: 9px 13px; background: #45304f; color: #fff8df; text-decoration: none; font-weight: 950; }
+.latest-sky.in-page { margin-top: 14px; }
+.quest-form { overflow: visible; }
+.quest-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+.quest-steps button { border: 1px solid rgba(69,48,79,.12); border-radius: 18px; padding: 10px; background: #fffdf7; color: var(--muted); font-weight: 950; cursor: pointer; }
+.quest-steps button.active { background: #4b3155; color: #fff8df; }
+.quest-steps span { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 6px; border-radius: 999px; background: rgba(244,193,93,.6); color: var(--ink); }
+.takeaway-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.takeaway-row span { border-radius: 999px; padding: 9px 12px; background: #fff0a8; color: var(--ink); font-weight: 950; }
+.feedback-done { margin-top: 14px; border-radius: 999px; padding: 12px 16px; background: #dcfff1; color: var(--ink); font-weight: 950; text-align: center; }
+.connect-grid, .sky-list, .calendar-list { display: grid; gap: 12px; margin-top: 14px; }
+.connect-grid button { border: 1px solid rgba(69,48,79,.12); border-radius: 22px; background: #fffdf7; padding: 14px; text-align: left; color: var(--ink); cursor: pointer; }
+.connect-grid strong, .connect-grid span, .connect-grid small { display: block; }
+.connect-grid span, .connect-grid small { color: var(--muted); font-weight: 800; margin-top: 4px; }
+.public-hero, .sky-list article { display: grid; grid-template-columns: 74px 1fr; gap: 14px; align-items: start; border: 1px solid rgba(69,48,79,.1); border-radius: 26px; padding: 16px; background: #fffdf7; }
+.public-hero svg, .sky-list svg { width: 58px; height: 58px; fill: #fff2aa; stroke: var(--ink); stroke-width: 4; }
+.public-hero svg path, .sky-list svg path { fill: #f09d73; }
+.summary-card.mini { margin-top: 14px; grid-template-columns: 54px 1fr; }
+.sky-list small { color: var(--accent); font-weight: 950; text-transform: uppercase; letter-spacing: .08em; }
+.sky-list details { background: rgba(69,48,79,.05); }
+.calendar-card { margin-top: 14px; border-radius: 26px; padding: 16px; background: #fffdf7; border: 1px solid rgba(69,48,79,.1); }
+.calendar-list article { border-radius: 20px; padding: 14px; background: rgba(69,48,79,.05); }
+.calendar-list time, .calendar-list span { display: inline-flex; margin-right: 8px; color: var(--muted); font-weight: 900; }
+.calendar-list strong { display: block; margin: 6px 0; }
+.coming-soon { display: grid; justify-items: center; text-align: center; gap: 12px; }
+.coming-soon svg { width: 110px; height: 110px; fill: #fff2aa; stroke: var(--ink); stroke-width: 4; }
+.coming-soon svg path { fill: #f09d73; }
 footer p { margin: 0 0 8px; }
 .legal-links { display: flex; justify-content: center; gap: 12px; }
 .legal-links a { color: var(--ink); font-weight: 950; text-decoration: none; }
 .legal-links a:hover { text-decoration: underline; }
-@media (max-width: 720px) { .bottom-nav { position: fixed; left: 14px; right: 14px; bottom: 10px; width: auto; margin: 0; grid-template-columns: repeat(4, 1fr); } .install-badge.show { position: fixed; left: 14px; right: 14px; bottom: 92px; width: auto; z-index: 24; margin: 0; } .phone-frame { padding-bottom: 184px; } .account-grid { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .bottom-nav { position: fixed; left: 14px; right: 14px; bottom: 10px; width: auto; margin: 0; grid-template-columns: repeat(4, 1fr); } .install-badge.show { position: fixed; left: 14px; right: 14px; bottom: 92px; width: auto; z-index: 24; margin: 0; } .phone-frame { padding-bottom: 184px; } .account-grid, .knowledge-nav, .quest-steps, .public-hero, .sky-list article, .history-entry { grid-template-columns: 1fr; } }
 </style>

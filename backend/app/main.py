@@ -127,6 +127,43 @@ class FeedbackInput(BaseModel):
     source: str = Field(default="web", max_length=40)
 
 
+class PublicProfileInput(BaseModel):
+    profile_id: str = Field(max_length=80)
+    username: str = Field(min_length=3, max_length=32, pattern=r"^[a-z0-9_]+$")
+    email: str = Field(min_length=5, max_length=160)
+    display_name: str | None = Field(default=None, max_length=80)
+    bio: str | None = Field(default=None, max_length=240)
+
+
+class UserHistorySyncInput(BaseModel):
+    profile_ids: list[str] = Field(default_factory=list, max_length=50)
+
+
+class SkyPostInput(BaseModel):
+    id: str | None = Field(default=None, max_length=80)
+    slug: str = Field(min_length=3, max_length=120, pattern=r"^[a-z0-9-]+$")
+    title: str = Field(min_length=3, max_length=180)
+    tag: str = Field(min_length=2, max_length=80)
+    summary: str = Field(min_length=8, max_length=600)
+    body: str = Field(min_length=8, max_length=2400)
+
+
+class SkyPostDeleteInput(BaseModel):
+    id: str = Field(max_length=80)
+
+
+class AstrologyCalendarInput(BaseModel):
+    id: str | None = Field(default=None, max_length=80)
+    event_date: date
+    title: str = Field(min_length=3, max_length=180)
+    tag: str = Field(min_length=2, max_length=80)
+    summary: str = Field(min_length=8, max_length=600)
+
+
+class AstrologyCalendarDeleteInput(BaseModel):
+    id: str = Field(max_length=80)
+
+
 class QuestStartInput(BaseModel):
     profile_id: str
     quest_slug: str
@@ -224,6 +261,93 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS public_profiles (
+                username TEXT PRIMARY KEY,
+                profile_id TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL,
+                display_name TEXT,
+                bio TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_profiles (
+                user_sub TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                linked_at TEXT NOT NULL,
+                PRIMARY KEY (user_sub, profile_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sky_posts (
+                id TEXT PRIMARY KEY,
+                slug TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                body TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS astrology_calendar (
+                id TEXT PRIMARY KEY,
+                event_date TEXT NOT NULL,
+                title TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        if conn.execute("SELECT COUNT(*) AS count FROM astrology_calendar").fetchone()["count"] == 0:
+            seed_time = now_iso()
+            for event in default_astrology_calendar():
+                conn.execute(
+                    """
+                    INSERT INTO astrology_calendar (id, event_date, title, tag, summary, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(uuid.uuid4()),
+                        event["event_date"],
+                        event["title"],
+                        event["tag"],
+                        event["summary"],
+                        seed_time,
+                        seed_time,
+                    ),
+                )
+        if conn.execute("SELECT COUNT(*) AS count FROM sky_posts").fetchone()["count"] == 0:
+            seed_time = now_iso()
+            for post in default_sky_posts():
+                conn.execute(
+                    """
+                    INSERT INTO sky_posts (id, slug, title, tag, summary, body, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(uuid.uuid4()),
+                        post["slug"],
+                        post["title"],
+                        post["tag"],
+                        post["summary"],
+                        post["body"],
+                        seed_time,
+                        seed_time,
+                    ),
+                )
 
 
 def verify_admin_credentials(username_value: str, password_value: str) -> bool:
@@ -292,6 +416,13 @@ def read_google_session(request: Request) -> dict[str, Any] | None:
         return json.loads(payload)
     except json.JSONDecodeError:
         return None
+
+
+def require_google_user(request: Request) -> dict[str, Any]:
+    user = read_google_session(request)
+    if not user or not (user.get("sub") or user.get("email")):
+        raise HTTPException(status_code=401, detail="Google login required")
+    return user
 
 
 def is_admin_request(request: Request) -> bool:
@@ -695,6 +826,113 @@ def save_profile(profile: dict[str, Any]) -> None:
         )
 
 
+def latest_interpretation(profile_id: str) -> dict[str, Any] | None:
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT id, provider, model, response_json, created_at
+            FROM interpretations
+            WHERE profile_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (profile_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "interpretation_id": row["id"],
+        "provider": row["provider"],
+        "model": row["model"],
+        "interpretation": json.loads(row["response_json"]),
+        "created_at": row["created_at"],
+    }
+
+
+def public_profile_payload(row: sqlite3.Row) -> dict[str, Any]:
+    profile = load_profile(row["profile_id"])
+    return {
+        "username": row["username"],
+        "email": row["email"],
+        "display_name": row["display_name"] or profile.get("display_name"),
+        "bio": row["bio"],
+        "profile_id": row["profile_id"],
+        "profile": profile,
+        "latest_interpretation": latest_interpretation(row["profile_id"]),
+        "public_url": f"{public_app_url()}/@{row['username']}",
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def default_sky_posts() -> list[dict[str, str]]:
+    return [
+        {
+            "slug": "bulan-sebagai-ritme-harian",
+            "title": "Bulan sebagai ritme harian",
+            "tag": "Moon",
+            "summary": "Bulan sering dipakai sebagai bahasa simbolik untuk membaca ritme emosi, kebutuhan aman, dan kapan kita perlu jeda.",
+            "body": "Di Hermex, berita langit tidak dibaca sebagai sebab pasti peristiwa bumi. Ia dipakai sebagai lensa refleksi: ketika ritme terasa cepat, kita bisa bertanya apa yang perlu dirapikan, dilepas, atau dirawat.",
+        },
+        {
+            "slug": "merkurius-dan-cuaca-komunikasi",
+            "title": "Merkurius dan cuaca komunikasi",
+            "tag": "Mercury",
+            "summary": "Merkurius melambangkan cara berpikir, bahasa, belajar, dan transaksi ide antar orang.",
+            "body": "Saat tema Merkurius sedang terasa kuat, hubungan antara langit dan bumi bisa dibaca sebagai ajakan memperjelas pesan: menulis lebih ringkas, memeriksa asumsi, dan membuat keputusan dengan informasi yang cukup.",
+        },
+        {
+            "slug": "saturnus-dan-struktur-sosial",
+            "title": "Saturnus dan struktur sosial",
+            "tag": "Saturn",
+            "summary": "Saturnus sering dikaitkan dengan batas, struktur, tanggung jawab, dan proses menjadi dewasa.",
+            "body": "Dalam peristiwa sehari-hari, simbol Saturnus membantu membaca mengapa sistem, aturan, dan komitmen terasa penting. Bukan untuk menakut-nakuti, tapi untuk melihat area hidup yang minta fondasi lebih sehat.",
+        },
+    ]
+
+
+def default_astrology_calendar() -> list[dict[str, str]]:
+    today = date.today()
+    return [
+        {
+            "event_date": today.isoformat(),
+            "title": "Moon check-in",
+            "tag": "Moon",
+            "summary": "Momen refleksi ringan untuk membaca kebutuhan emosi dan ritme harian.",
+        },
+        {
+            "event_date": (today + timedelta(days=7)).isoformat(),
+            "title": "Mercury note day",
+            "tag": "Mercury",
+            "summary": "Hari simbolik untuk merapikan pesan, catatan, dan cara mengambil keputusan.",
+        },
+    ]
+
+
+def sky_news_rows() -> list[dict[str, Any]]:
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, slug, title, tag, summary, body, created_at, updated_at
+            FROM sky_posts
+            ORDER BY updated_at DESC
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def astrology_calendar_rows() -> list[dict[str, Any]]:
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, event_date, title, tag, summary, created_at, updated_at
+            FROM astrology_calendar
+            ORDER BY event_date ASC, updated_at DESC
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def parse_llm_content(content: str, raw: dict[str, Any] | None = None) -> dict[str, Any]:
     text = content.strip()
     if text.startswith("```json"):
@@ -1013,6 +1251,73 @@ def auth_logout() -> RedirectResponse:
     return response
 
 
+@app.post("/api/v1/user/history/sync")
+def sync_user_history(payload: UserHistorySyncInput, request: Request) -> dict[str, Any]:
+    user = require_google_user(request)
+    user_sub = str(user.get("sub") or user.get("email"))
+    profile_ids = list(dict.fromkeys([profile_id for profile_id in payload.profile_ids if profile_id]))
+    linked_count = 0
+    with db() as conn:
+        for profile_id in profile_ids:
+            exists = conn.execute("SELECT 1 FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+            if not exists:
+                continue
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO user_profiles (user_sub, profile_id, linked_at)
+                VALUES (?, ?, ?)
+                """,
+                (user_sub, profile_id, now_iso()),
+            )
+            linked_count += 1
+    return {"status": "ok", "linked": linked_count}
+
+
+@app.get("/api/v1/user/history")
+def get_user_history(request: Request) -> dict[str, Any]:
+    user = require_google_user(request)
+    user_sub = str(user.get("sub") or user.get("email"))
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT p.profile_json, up.linked_at
+            FROM user_profiles up
+            JOIN profiles p ON p.id = up.profile_id
+            WHERE up.user_sub = ?
+            ORDER BY up.linked_at DESC
+            """,
+            (user_sub,),
+        ).fetchall()
+    history = []
+    for row in rows:
+        profile = json.loads(row["profile_json"])
+        history.append(
+            {
+                "profile_id": profile["profile_id"],
+                "display_name": profile.get("display_name"),
+                "birth_place": profile.get("birth_place"),
+                "created_at": profile.get("created_at"),
+                "dominant": profile.get("traits", {}).get("dominant_element", "-"),
+                "profile": profile,
+                "interpretation": latest_interpretation(profile["profile_id"]),
+                "linked_at": row["linked_at"],
+            }
+        )
+    return {"history": history}
+
+
+@app.delete("/api/v1/user/history/{profile_id}")
+def delete_user_history(profile_id: str, request: Request) -> dict[str, Any]:
+    user = require_google_user(request)
+    user_sub = str(user.get("sub") or user.get("email"))
+    with db() as conn:
+        conn.execute(
+            "DELETE FROM user_profiles WHERE user_sub = ? AND profile_id = ?",
+            (user_sub, profile_id),
+        )
+    return {"status": "ok"}
+
+
 @app.post("/api/v1/birth/analyze")
 def analyze_birth(payload: BirthProfileInput) -> dict[str, Any]:
     profile_id = str(uuid.uuid4())
@@ -1083,6 +1388,180 @@ def validate_birth(payload: ValidationInput) -> dict[str, Any]:
 @app.get("/api/v1/profiles/{profile_id}")
 def get_profile(profile_id: str) -> dict[str, Any]:
     return load_profile(profile_id)
+
+
+@app.post("/api/v1/public-profiles")
+def create_public_profile(payload: PublicProfileInput) -> dict[str, Any]:
+    profile = load_profile(payload.profile_id)
+    username = payload.username.strip().lower()
+    email = payload.email.strip().lower()
+    if "@" not in email or "." not in email.rsplit("@", 1)[-1]:
+        raise HTTPException(status_code=422, detail="Valid email is required")
+
+    with db() as conn:
+        existing_username = conn.execute(
+            "SELECT profile_id FROM public_profiles WHERE username = ?",
+            (username,),
+        ).fetchone()
+        if existing_username and existing_username["profile_id"] != payload.profile_id:
+            raise HTTPException(status_code=409, detail="Username already taken")
+
+        existing_profile = conn.execute(
+            "SELECT username FROM public_profiles WHERE profile_id = ?",
+            (payload.profile_id,),
+        ).fetchone()
+        if existing_profile and existing_profile["username"] != username:
+            username_taken = conn.execute(
+                "SELECT 1 FROM public_profiles WHERE username = ?",
+                (username,),
+            ).fetchone()
+            if username_taken:
+                raise HTTPException(status_code=409, detail="Username already taken")
+
+        updated_at = now_iso()
+        if existing_profile:
+            conn.execute(
+                """
+                UPDATE public_profiles
+                SET username = ?, email = ?, display_name = ?, bio = ?, updated_at = ?
+                WHERE profile_id = ?
+                """,
+                (
+                    username,
+                    email,
+                    payload.display_name or profile.get("display_name"),
+                    payload.bio,
+                    updated_at,
+                    payload.profile_id,
+                ),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO public_profiles (username, profile_id, email, display_name, bio, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    username,
+                    payload.profile_id,
+                    email,
+                    payload.display_name or profile.get("display_name"),
+                    payload.bio,
+                    updated_at,
+                    updated_at,
+                ),
+            )
+        row = conn.execute(
+            "SELECT * FROM public_profiles WHERE username = ?",
+            (username,),
+        ).fetchone()
+    return {"status": "ok", "public_profile": public_profile_payload(row)}
+
+
+@app.get("/api/v1/public-profiles")
+def list_public_profiles(limit: int = 24) -> dict[str, Any]:
+    limit = max(1, min(limit, 50))
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM public_profiles
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return {"profiles": [public_profile_payload(row) for row in rows]}
+
+
+@app.get("/api/v1/public-profiles/{username}")
+def get_public_profile(username: str) -> dict[str, Any]:
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM public_profiles WHERE username = ?",
+            (username.strip().lower(),),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Public profile not found")
+    return public_profile_payload(row)
+
+
+@app.get("/api/v1/sky-news")
+def sky_news() -> dict[str, Any]:
+    posts = sky_news_rows()
+    return {"updated_at": now_iso(), "disclaimer": "Editorial astrology for reflection, not deterministic prediction.", "posts": posts}
+
+
+@app.get("/api/v1/sky-calendar")
+def sky_calendar() -> dict[str, Any]:
+    return {"updated_at": now_iso(), "events": astrology_calendar_rows()}
+
+
+@app.post("/api/v1/admin/sky-news")
+def admin_save_sky_news(payload: SkyPostInput, request: Request) -> dict[str, Any]:
+    require_admin(request)
+    post_id = payload.id or str(uuid.uuid4())
+    updated_at = now_iso()
+    with db() as conn:
+        if payload.id:
+            conn.execute(
+                """
+                UPDATE sky_posts
+                SET slug = ?, title = ?, tag = ?, summary = ?, body = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (payload.slug, payload.title, payload.tag, payload.summary, payload.body, updated_at, payload.id),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO sky_posts (id, slug, title, tag, summary, body, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (post_id, payload.slug, payload.title, payload.tag, payload.summary, payload.body, updated_at, updated_at),
+            )
+    return {"status": "ok", "post_id": post_id}
+
+
+@app.post("/api/v1/admin/sky-news/delete")
+def admin_delete_sky_news(payload: SkyPostDeleteInput, request: Request) -> dict[str, Any]:
+    require_admin(request)
+    with db() as conn:
+        conn.execute("DELETE FROM sky_posts WHERE id = ?", (payload.id,))
+    return {"status": "ok"}
+
+
+@app.post("/api/v1/admin/sky-calendar")
+def admin_save_sky_calendar(payload: AstrologyCalendarInput, request: Request) -> dict[str, Any]:
+    require_admin(request)
+    event_id = payload.id or str(uuid.uuid4())
+    updated_at = now_iso()
+    with db() as conn:
+        if payload.id:
+            conn.execute(
+                """
+                UPDATE astrology_calendar
+                SET event_date = ?, title = ?, tag = ?, summary = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (payload.event_date.isoformat(), payload.title, payload.tag, payload.summary, updated_at, payload.id),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO astrology_calendar (id, event_date, title, tag, summary, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (event_id, payload.event_date.isoformat(), payload.title, payload.tag, payload.summary, updated_at, updated_at),
+            )
+    return {"status": "ok", "event_id": event_id}
+
+
+@app.post("/api/v1/admin/sky-calendar/delete")
+def admin_delete_sky_calendar(payload: AstrologyCalendarDeleteInput, request: Request) -> dict[str, Any]:
+    require_admin(request)
+    with db() as conn:
+        conn.execute("DELETE FROM astrology_calendar WHERE id = ?", (payload.id,))
+    return {"status": "ok"}
 
 
 @app.post("/api/v1/interpretation")
@@ -1352,6 +1831,101 @@ async def sync_admin_llm_models(payload: LLMModelSyncInput, _admin: bool = Depen
     return {"models": models}
 
 
+@app.post("/admin/sky-news/save")
+async def admin_sky_news_save_form(request: Request) -> RedirectResponse:
+    require_admin(request)
+    form = await request.form()
+    post_id = str(form.get("id") or "").strip()
+    updated_at = now_iso()
+    raw_slug = str(form.get("slug") or "").strip().lower().replace(" ", "-")
+    slug = "".join(char for char in raw_slug if char.isalnum() or char == "-").strip("-")
+    values = (
+        slug,
+        str(form.get("title") or "").strip(),
+        str(form.get("tag") or "").strip(),
+        str(form.get("summary") or "").strip(),
+        str(form.get("body") or "").strip(),
+    )
+    if not values[0] or not values[1] or not values[3] or not values[4]:
+        return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
+    with db() as conn:
+        if post_id:
+            conn.execute(
+                """
+                UPDATE sky_posts
+                SET slug = ?, title = ?, tag = ?, summary = ?, body = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (*values, updated_at, post_id),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO sky_posts (id, slug, title, tag, summary, body, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (str(uuid.uuid4()), *values, updated_at, updated_at),
+            )
+    return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
+
+
+@app.post("/admin/sky-news/delete")
+async def admin_sky_news_delete_form(request: Request) -> RedirectResponse:
+    require_admin(request)
+    form = await request.form()
+    post_id = str(form.get("id") or "").strip()
+    if post_id:
+        with db() as conn:
+            conn.execute("DELETE FROM sky_posts WHERE id = ?", (post_id,))
+    return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
+
+
+@app.post("/admin/sky-calendar/save")
+async def admin_sky_calendar_save_form(request: Request) -> RedirectResponse:
+    require_admin(request)
+    form = await request.form()
+    event_id = str(form.get("id") or "").strip()
+    updated_at = now_iso()
+    values = (
+        str(form.get("event_date") or "").strip(),
+        str(form.get("title") or "").strip(),
+        str(form.get("tag") or "").strip(),
+        str(form.get("summary") or "").strip(),
+    )
+    if not all(values):
+        return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
+    with db() as conn:
+        if event_id:
+            conn.execute(
+                """
+                UPDATE astrology_calendar
+                SET event_date = ?, title = ?, tag = ?, summary = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (*values, updated_at, event_id),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO astrology_calendar (id, event_date, title, tag, summary, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (str(uuid.uuid4()), *values, updated_at, updated_at),
+            )
+    return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
+
+
+@app.post("/admin/sky-calendar/delete")
+async def admin_sky_calendar_delete_form(request: Request) -> RedirectResponse:
+    require_admin(request)
+    form = await request.form()
+    event_id = str(form.get("id") or "").strip()
+    if event_id:
+        with db() as conn:
+            conn.execute("DELETE FROM astrology_calendar WHERE id = ?", (event_id,))
+    return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
+
+
 @app.get("/admin/dashboard", response_class=HTMLResponse)
 def admin_dashboard(request: Request, limit: int = 50) -> str:
     if not is_admin_request(request):
@@ -1370,6 +1944,8 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
         for value, label in provider_options.items()
     )
     feedback_rows = admin_feedback_history()
+    sky_rows = sky_news_rows()
+    calendar_rows = astrology_calendar_rows()
     average_rating = round(sum(row["rating"] for row in feedback_rows) / len(feedback_rows), 2) if feedback_rows else 0
     cards = []
     for guest in data["guests"]:
@@ -1403,6 +1979,63 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
             </article>
             """
         )
+    sky_cards = []
+    for post in sky_rows:
+        sky_cards.append(
+            f"""
+            <article class="guest-card">
+              <div class="guest-head">
+                <div>
+                  <time>{html.escape(post.get("updated_at") or "")}</time>
+                  <h2>{html.escape(post.get("title") or "")}</h2>
+                </div>
+                <span class="pill">{html.escape(post.get("tag") or "")}</span>
+              </div>
+              <form method="post" action="/admin/sky-news/save" class="stack-form">
+                <input type="hidden" name="id" value="{html.escape(post.get("id") or "")}" />
+                <label>Slug<input name="slug" value="{html.escape(post.get("slug") or "")}" /></label>
+                <label>Title<input name="title" value="{html.escape(post.get("title") or "")}" /></label>
+                <label>Tag<input name="tag" value="{html.escape(post.get("tag") or "")}" /></label>
+                <label>Summary<textarea name="summary">{html.escape(post.get("summary") or "")}</textarea></label>
+                <label>Body<textarea name="body">{html.escape(post.get("body") or "")}</textarea></label>
+                <button type="submit">Save post</button>
+              </form>
+              <form method="post" action="/admin/sky-news/delete">
+                <input type="hidden" name="id" value="{html.escape(post.get("id") or "")}" />
+                <button class="danger" type="submit">Delete post</button>
+              </form>
+            </article>
+            """
+        )
+
+    calendar_cards = []
+    for event in calendar_rows:
+        calendar_cards.append(
+            f"""
+            <article class="guest-card">
+              <div class="guest-head">
+                <div>
+                  <time>{html.escape(event.get("event_date") or "")}</time>
+                  <h2>{html.escape(event.get("title") or "")}</h2>
+                </div>
+                <span class="pill">{html.escape(event.get("tag") or "")}</span>
+              </div>
+              <form method="post" action="/admin/sky-calendar/save" class="stack-form">
+                <input type="hidden" name="id" value="{html.escape(event.get("id") or "")}" />
+                <label>Date<input name="event_date" type="date" value="{html.escape(event.get("event_date") or "")}" /></label>
+                <label>Title<input name="title" value="{html.escape(event.get("title") or "")}" /></label>
+                <label>Tag<input name="tag" value="{html.escape(event.get("tag") or "")}" /></label>
+                <label>Summary<textarea name="summary">{html.escape(event.get("summary") or "")}</textarea></label>
+                <button type="submit">Save event</button>
+              </form>
+              <form method="post" action="/admin/sky-calendar/delete">
+                <input type="hidden" name="id" value="{html.escape(event.get("id") or "")}" />
+                <button class="danger" type="submit">Delete event</button>
+              </form>
+            </article>
+            """
+        )
+
     feedback_cards = []
     for item in feedback_rows:
         stars = "★" * int(item["rating"]) + "☆" * (5 - int(item["rating"]))
@@ -1465,6 +2098,11 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
           .admin-toolbar input {{ flex: 1; }}
           .admin-toolbar button {{ margin: 0; white-space: nowrap; }}
           .feedback-card p {{ font-size: 1rem; line-height: 1.55; }}
+          .stack-form {{ display: grid; gap: 12px; margin-top: 12px; }}
+          .stack-form label {{ display: grid; gap: 6px; font-weight: 900; }}
+          .stack-form input, .stack-form textarea {{ width: 100%; border: 1px solid rgba(47,36,55,.16); border-radius: 16px; padding: 12px; background: rgba(255,255,255,.62); color: #20385e; font: inherit; box-sizing: border-box; }}
+          .stack-form textarea {{ min-height: 92px; resize: vertical; }}
+          .danger {{ margin-top: 10px; background: #f09d73; color: #2f2437; }}
           .guest-head {{ display: flex; justify-content: space-between; gap: 14px; align-items: start; }}
           h2 {{ margin: 0; }}
           .guest-head span {{ border-radius: 999px; background: #e6f5ef; padding: 8px 12px; font-weight: 800; }}
@@ -1491,6 +2129,7 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
             <button data-target="provider" type="button">Provider</button>
             <button data-target="prompt" type="button">Setting prompt</button>
             <button data-target="feedback" type="button">Feedback</button>
+            <button data-target="sky-news" type="button">Berita Langit</button>
             <button data-target="logs" type="button">Log</button>
           </nav>
           <section class="dashboard-panel active" data-panel="overview">
@@ -1551,6 +2190,33 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
             <span id="providerStatus"></span>
           </div>
           </section>
+          <section class="dashboard-panel" data-panel="sky-news">
+            <article class="guest-card">
+              <h2>Add Astrology Calendar event</h2>
+              <form method="post" action="/admin/sky-calendar/save" class="stack-form">
+                <label>Date<input name="event_date" type="date" /></label>
+                <label>Title<input name="title" placeholder="Venus enters Cancer" /></label>
+                <label>Tag<input name="tag" placeholder="Transit" /></label>
+                <label>Summary<textarea name="summary" placeholder="Dampak reflektif singkat untuk pembaca."></textarea></label>
+                <button type="submit">Add calendar event</button>
+              </form>
+            </article>
+            <h2>Astrology Calendar</h2>
+            {''.join(calendar_cards) or '<p>No astrology calendar events yet.</p>'}
+            <article class="guest-card">
+              <h2>Add Berita Langit post</h2>
+              <form method="post" action="/admin/sky-news/save" class="stack-form">
+                <label>Slug<input name="slug" placeholder="merkurius-dan-komunikasi" /></label>
+                <label>Title<input name="title" placeholder="Merkurius dan cuaca komunikasi" /></label>
+                <label>Tag<input name="tag" placeholder="Mercury" /></label>
+                <label>Summary<textarea name="summary" placeholder="Ringkasan pendek untuk kartu blog."></textarea></label>
+                <label>Body<textarea name="body" placeholder="Isi artikel sederhana."></textarea></label>
+                <button type="submit">Add post</button>
+              </form>
+            </article>
+            {''.join(sky_cards) or '<p>No sky posts yet.</p>'}
+          </section>
+
           <section class="dashboard-panel" data-panel="feedback">
             {''.join(feedback_cards) or '<p>No feedback yet.</p>'}
           </section>
