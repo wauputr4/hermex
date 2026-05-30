@@ -1493,6 +1493,14 @@ def create_public_profile(payload: PublicProfileInput, request: Request) -> dict
                     updated_at,
                 ),
             )
+            if user_sub:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO user_profiles (user_sub, profile_id, linked_at)
+                    VALUES (?, ?, ?)
+                    """,
+                    (user_sub, payload.profile_id, updated_at),
+                )
         row = conn.execute(
             "SELECT * FROM public_profiles WHERE username = ?",
             (username,),
