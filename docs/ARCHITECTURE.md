@@ -6,10 +6,10 @@ Hermex is organized into two main services:
 
 - **Frontend (SvelteKit + SVG/CSS interaction)**
   - Handles birth form, profile summary screens, astrology education, and installable-app style UI.
-  - Manages local UI state, guest draft/history storage, PWA install prompt, and backend API calls.
+  - Manages local UI state, guest draft/history storage, guest XP/badges, PWA install prompt, offline mode, and backend API calls.
 - **Backend (FastAPI + SQLite)**
   - Handles data validation, astrology computation, questionnaire scoring, and LLM orchestration.
-  - Stores profiles, sessions, quests, and interpretation history.
+  - Stores profiles, sessions, quests, feedback, admin settings, and interpretation history.
 
 ## 2) Main data flow
 
@@ -36,7 +36,7 @@ User submits birth input (name optional)
 - `build_trait_profile`: convert chart into interest/talent scores.
 
 ### 3.2 `astrology`
-- `planet_service`: compute major planet longitudes.
+- `planet_service`: compute major planet longitudes plus extended depth points when Swiss Ephemeris supports them.
 - `house_service`: house calculations (ascendant + cusps).
 - `aspect_service`: major aspects (conjunction, trine, sextile, square, opposition).
 
@@ -67,7 +67,9 @@ User submits birth input (name optional)
   - `id`, `profile_id`, `quest_slug`, `status`, `score`, `completed_at`, `result_json`
 - `settings`
   - `key`, `value`, `updated_at`
-  - stores local admin-editable prompt and AI provider settings
+  - stores local admin-editable prompt, AI provider settings, and usage limits
+- `feedback`
+  - `id`, `profile_id`, `interpretation_id`, `rating`, `message`, `source`, `created_at`
 
 ## 5) API contract (MVP)
 
@@ -111,7 +113,7 @@ Response:
 - Admin-only system prompt update.
 
 ### `POST /api/v1/admin/llm-config`
-- Admin-only provider/base URL/API key/model configuration.
+- Admin-only provider/base URL/API key/model configuration plus request-per-minute, request-per-day, and max-token limits.
 
 ### `POST /api/v1/admin/llm-models`
 - Admin-only model sync from an OpenAI-compatible `/models` endpoint.
@@ -132,6 +134,8 @@ Response:
 - API chart calculation should respond within 3 seconds for 95% of valid requests.
 - Same input must produce consistent chart output.
 - LLM prompts and responses must be auditable and stored with model metadata.
+- AI calls should be rate-limited according to admin settings before provider requests are sent.
+- PWA should show a friendly offline mode and navigation fallback when the device is disconnected.
 - Input sanitation and timezone checks must protect against malformed birth payloads.
 
 ## 7) Future considerations

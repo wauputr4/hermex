@@ -13,19 +13,19 @@ cd backend
 cp .env.example .env
 python3.11 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 18080
+.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 5667
 ```
 
 Backend URL:
 
 ```text
-http://127.0.0.1:18080
+http://127.0.0.1:5667
 ```
 
 Admin dashboard:
 
 ```text
-http://127.0.0.1:18080/admin/dashboard
+http://127.0.0.1:5666/admin/dashboard
 ```
 
 Default local admin credentials:
@@ -42,13 +42,13 @@ Change the credentials in `backend/.env` before using this outside local develop
 cd frontend
 cp .env.example .env
 npm install
-npm run dev -- --host 127.0.0.1 --port 18173
+npm run dev -- --host 127.0.0.1 --port 5666
 ```
 
 Frontend URL:
 
 ```text
-http://127.0.0.1:18173
+http://127.0.0.1:5666
 ```
 
 ## AI provider setup

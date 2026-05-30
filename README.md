@@ -14,15 +14,21 @@ Hermex turns birth context into a natal chart, shows readable astrology signals,
 
 - Mobile-first SvelteKit interface with installable-app feel.
 - PWA manifest and service worker so Hermex can be installed from the browser.
+- Offline PWA fallback page plus in-app offline mode for saved guest history and education.
 - Guest-first local storage for draft birth data and local guest chart history.
+- Local guest game progress with XP, streak, and badge storage.
 - Searchable birth-city picker with latitude, longitude, and timezone metadata.
 - Swiss Ephemeris natal chart calculation with Placidus houses when birth time and coordinates are available.
-- SVG natal-wheel visualization, planet cards, and aspect list.
+- SVG natal-wheel visualization, expanded planet cards, and aspect list.
 - Interactive astrology education page for planets, zodiac signs, houses, and aspects.
+- Google OAuth terms page placeholder for hosted account login.
+- Public legal pages for Google OAuth verification: `/terms` and `/privacy`.
 - AI interpretation page with highlighted summary, focused insight cards, roadmap, and user feedback.
 - Bottom navigation for Profile, Connect/share, and Hermex AI detail questions.
-- Local admin dashboard for guest history, prompt inspection, prompt editing, and AI provider configuration.
+- Local admin dashboard for overview, guest history, feedback, logs, prompt editing, and AI provider configuration.
 - OpenAI-compatible provider support with custom base URL, API key, model, temperature, max tokens, and model sync from `/models`.
+- Admin-controlled AI usage limits for requests per minute, requests per day, and max tokens.
+- Entitlement-ready usage layer for guest, free, supporter, and self-hosted plans without shipping payment-provider code.
 
 ## Stack
 
@@ -66,13 +72,13 @@ hermex/
 cd backend
 cp .env.example .env
 python3.11 -m pip install -r requirements.txt
-python3.11 -m uvicorn app.main:app --host 127.0.0.1 --port 18080 --reload
+python3.11 -m uvicorn app.main:app --host 127.0.0.1 --port 5667 --reload
 ```
 
 Backend URL:
 
 ```text
-http://127.0.0.1:18080
+http://127.0.0.1:5667
 ```
 
 ### 2. Frontend
@@ -81,13 +87,13 @@ http://127.0.0.1:18080
 cd frontend
 cp .env.example .env
 npm install
-npm run dev -- --host 127.0.0.1 --port 18173
+npm run dev -- --host 127.0.0.1 --port 5666
 ```
 
 Frontend URL:
 
 ```text
-http://127.0.0.1:18173
+http://127.0.0.1:5666
 ```
 
 ## Environment variables
@@ -101,25 +107,50 @@ LLM_API_KEY=your_api_key
 LLM_MODEL=gpt-4o-mini
 LLM_TEMPERATURE=0.4
 LLM_MAX_TOKENS=700
+LLM_REQUESTS_PER_MINUTE=6
+LLM_REQUESTS_PER_DAY=40
+SUPPORTER_MAX_TOKENS=1800
+SUPPORTER_REQUESTS_PER_MINUTE=60
+SUPPORTER_REQUESTS_PER_DAY=1000
+SELF_HOSTED_FULL_ACCESS=false
+SELF_HOSTED_MAX_TOKENS=4000
+SELF_HOSTED_REQUESTS_PER_MINUTE=300
+SELF_HOSTED_REQUESTS_PER_DAY=10000
+ENTITLEMENT_WEBHOOK_SECRET=
+PUBLIC_WRITE_REQUESTS_PER_MINUTE=20
+PUBLIC_WRITE_REQUESTS_PER_DAY=200
 
 SQLITE_URL=sqlite:///./hermex.db
-CORS_ORIGINS=http://localhost:18173,http://127.0.0.1:18173
-PUBLIC_APP_URL=https://hermex.fun
+CORS_ORIGINS=http://localhost:5666,http://127.0.0.1:5666
+PUBLIC_APP_URL=http://127.0.0.1:5666
 
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change_this_password
 ADMIN_SESSION_SECRET=change_this_session_secret
+ADMIN_SESSION_MAX_AGE_SECONDS=28800
+
+GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=http://127.0.0.1:5667/api/v1/auth/google/callback
+GOOGLE_SESSION_SECRET=change_this_google_session_secret
+GOOGLE_SESSION_MAX_AGE_SECONDS=2592000
 ```
 
 Never commit real API keys. Runtime secrets are intentionally ignored by `.gitignore`.
+
+For hosted deployments, set `PUBLIC_APP_URL=https://hermex.fun`,
+`GOOGLE_REDIRECT_URI=https://hermex.fun/api/v1/auth/google/callback`, and replace all
+admin, Google, provider, and entitlement secrets with strong private values.
 
 ## Admin dashboard
 
 Local dashboard:
 
 ```text
-http://127.0.0.1:18080/admin/dashboard
+http://127.0.0.1:5666/admin/dashboard
 ```
+
+In local development, Vite proxies `/admin` and `/api/v1` from frontend port `5666` to backend port `5667`.
 
 Default local credentials:
 
@@ -127,6 +158,10 @@ Default local credentials:
 username: admin
 password: hermes-admin
 ```
+
+The default admin password and session secret are accepted only for local
+`http://127.0.0.1` / `http://localhost` development. Hosted deployments must set
+`ADMIN_PASSWORD` and `ADMIN_SESSION_SECRET` to non-default values.
 
 Change them with:
 
@@ -146,13 +181,56 @@ The dashboard supports:
 - Custom OpenAI-compatible endpoint.
 - API key input.
 - Model sync from the configured endpoint's `/models` route.
+- Usage limits for AI requests per minute, AI requests per day, and max tokens.
+- Feedback and log menus with guest export for local auditing.
+
+## Entitlement-ready usage layer
+
+Hermex keeps hosted payment-provider code out of the public repo. The open-source app only stores usage entitlements and applies plan-aware AI limits.
+
+This keeps the community edition clean:
+
+- Self-hosted users can run the app without any payment service.
+- Hosted maintainers can connect any private entitlement service later.
+- No provider-specific payment integration is required in this repository.
+
+Suggested hosted setup:
+
+1. Keep payment-provider code in a private service outside this repo.
+2. After a hosted entitlement changes, the private service calls `POST /api/v1/internal/entitlement`.
+3. Send `X-Hermex-Entitlement-Secret: <ENTITLEMENT_WEBHOOK_SECRET>` with a payload such as:
+
+```json
+{
+  "subject_type": "email",
+  "subject_id": "user@example.com",
+  "plan": "supporter",
+  "status": "active",
+  "requests_per_minute": 60,
+  "requests_per_day": 1000,
+  "max_tokens": 1800,
+  "source": "hosted-entitlement",
+  "external_id": "external-entitlement-id",
+  "current_period_end": "2026-06-30T23:59:59+07:00"
+}
+```
+
+Self-hosted users can ignore payment entirely and set `SELF_HOSTED_FULL_ACCESS=true`, or configure the global/admin limits to match their own deployment policy.
 
 ## API overview
 
 - `GET /api/v1/health`
+- `GET /api/v1/entitlement`
 - `POST /api/v1/birth/analyze`
 - `POST /api/v1/birth/validate`
+- `GET /api/v1/profiles/{profile_id}`
 - `POST /api/v1/interpretation`
+- `POST /api/v1/interpretation/ask`
+- `POST /api/v1/feedback`
+- `GET /api/v1/auth/google/start`
+- `GET /api/v1/auth/google/callback`
+- `GET /api/v1/auth/me`
+- `GET /api/v1/auth/logout`
 - `POST /api/v1/quests/start`
 - `POST /api/v1/quests/complete`
 - `GET /api/v1/roadmap/{profile_id}`
@@ -160,6 +238,9 @@ The dashboard supports:
 - `POST /api/v1/admin/prompt`
 - `POST /api/v1/admin/llm-config`
 - `POST /api/v1/admin/llm-models`
+- `GET /api/v1/admin/entitlements`
+- `POST /api/v1/admin/entitlements`
+- `POST /api/v1/internal/entitlement`
 
 Admin endpoints require dashboard login or HTTP Basic auth.
 
@@ -182,6 +263,8 @@ The app treats astrology as symbolic reflection and learning material, not deter
 
 ## Documentation
 
+- Public Terms URL for OAuth setup: `https://hermex.fun/terms`
+- Public Privacy URL for OAuth setup: `https://hermex.fun/privacy`
 - [docs/PLAN.md](docs/PLAN.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)

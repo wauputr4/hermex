@@ -27,7 +27,7 @@ LLM_MAX_TOKENS=700
 Open:
 
 ```text
-http://127.0.0.1:18080/admin/dashboard
+http://127.0.0.1:5666/admin/dashboard
 ```
 
 The dashboard can update:
