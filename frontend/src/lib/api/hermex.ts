@@ -1,4 +1,4 @@
-export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:18080';
+export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:5667';
 
 export type BirthPayload = {
   display_name?: string;
@@ -118,6 +118,21 @@ export async function submitFeedback(payload: {
 
 export async function getAuthMe() {
   return apiGet<{ authenticated: boolean; user: null | { name?: string; email?: string; picture?: string } }>('/api/v1/auth/me');
+}
+
+export async function getEntitlement() {
+  return apiGet<{
+    plan: string;
+    status: string;
+    authenticated: boolean;
+    source: string;
+    current_period_end?: string | null;
+    limits: {
+      requests_per_minute: number;
+      requests_per_day: number;
+      max_tokens: number;
+    };
+  }>('/api/v1/entitlement');
 }
 
 export async function syncUserHistory(profile_claims: Array<{ profile_id: string; claim_token: string }>) {

@@ -119,6 +119,19 @@ class LLMModelSyncInput(BaseModel):
     api_key: str | None = Field(default=None, max_length=500)
 
 
+class EntitlementInput(BaseModel):
+    subject_type: str = Field(default="user_sub", pattern="^(user_sub|email)$")
+    subject_id: str = Field(min_length=3, max_length=180)
+    plan: str = Field(default="supporter", max_length=40)
+    status: str = Field(default="active", pattern="^(active|trialing|past_due|canceled|expired)$")
+    requests_per_minute: int | None = Field(default=None, ge=1, le=300)
+    requests_per_day: int | None = Field(default=None, ge=1, le=10000)
+    max_tokens: int | None = Field(default=None, ge=128, le=4000)
+    source: str = Field(default="manual", max_length=80)
+    external_id: str | None = Field(default=None, max_length=180)
+    current_period_end: str | None = Field(default=None, max_length=80)
+
+
 class FeedbackInput(BaseModel):
     profile_id: str | None = Field(default=None, max_length=80)
     interpretation_id: str | None = Field(default=None, max_length=80)
@@ -292,6 +305,23 @@ def init_db() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS entitlements (
+                subject_type TEXT NOT NULL,
+                subject_id TEXT NOT NULL,
+                plan TEXT NOT NULL,
+                status TEXT NOT NULL,
+                limits_json TEXT NOT NULL DEFAULT '{}',
+                source TEXT NOT NULL,
+                external_id TEXT,
+                current_period_end TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (subject_type, subject_id)
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS sky_posts (
                 id TEXT PRIMARY KEY,
                 slug TEXT NOT NULL UNIQUE,
@@ -372,7 +402,7 @@ def admin_session_token() -> str:
 
 
 def public_app_url() -> str:
-    return os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:18173").strip().rstrip("/")
+    return os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:5666").strip().rstrip("/")
 
 
 def google_oauth_config() -> dict[str, str]:
@@ -381,7 +411,7 @@ def google_oauth_config() -> dict[str, str]:
         "client_secret": os.getenv("GOOGLE_CLIENT_SECRET", "").strip(),
         "redirect_uri": os.getenv(
             "GOOGLE_REDIRECT_URI",
-            "http://127.0.0.1:18080/api/v1/auth/google/callback",
+            "http://127.0.0.1:5667/api/v1/auth/google/callback",
         ).strip(),
         "session_secret": os.getenv(
             "GOOGLE_SESSION_SECRET",
@@ -557,6 +587,227 @@ def public_llm_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
+def env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+def normalize_limit_value(value: Any, minimum: int, maximum: int, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return min(maximum, max(minimum, parsed))
+
+
+def plan_default_limits(plan: str) -> dict[str, int]:
+    config = get_llm_config()
+    base_limits = {
+        "requests_per_minute": normalize_limit_value(config["requests_per_minute"], 1, 300, 6),
+        "requests_per_day": normalize_limit_value(config["requests_per_day"], 1, 10000, 40),
+        "max_tokens": normalize_limit_value(config["max_tokens"], 128, 4000, 700),
+    }
+    normalized_plan = plan.lower().strip()
+    if normalized_plan in {"supporter", "paid", "pro", "plus"}:
+        return {
+            "requests_per_minute": env_int("SUPPORTER_REQUESTS_PER_MINUTE", 60),
+            "requests_per_day": env_int("SUPPORTER_REQUESTS_PER_DAY", 1000),
+            "max_tokens": env_int("SUPPORTER_MAX_TOKENS", 1800),
+        }
+    if normalized_plan == "self_hosted":
+        return {
+            "requests_per_minute": env_int("SELF_HOSTED_REQUESTS_PER_MINUTE", 300),
+            "requests_per_day": env_int("SELF_HOSTED_REQUESTS_PER_DAY", 10000),
+            "max_tokens": env_int("SELF_HOSTED_MAX_TOKENS", 4000),
+        }
+    return base_limits
+
+
+def merge_entitlement_limits(plan: str, limits_json: str | None = None) -> dict[str, int]:
+    limits = plan_default_limits(plan)
+    try:
+        custom_limits = json.loads(limits_json or "{}")
+    except json.JSONDecodeError:
+        custom_limits = {}
+    for key, minimum, maximum in (
+        ("requests_per_minute", 1, 300),
+        ("requests_per_day", 1, 10000),
+        ("max_tokens", 128, 4000),
+    ):
+        if key in custom_limits:
+            limits[key] = normalize_limit_value(custom_limits[key], minimum, maximum, limits[key])
+        else:
+            limits[key] = normalize_limit_value(limits[key], minimum, maximum, limits[key])
+    return limits
+
+
+def parse_period_end(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.now(timezone.utc) - timedelta(seconds=1)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def entitlement_row_is_active(row: sqlite3.Row | dict[str, Any] | None) -> bool:
+    if not row:
+        return False
+    if row["status"] not in {"active", "trialing"}:
+        return False
+    period_end = parse_period_end(row["current_period_end"])
+    return period_end is None or period_end > datetime.now(timezone.utc)
+
+
+def entitlement_payload(
+    plan: str,
+    status: str,
+    limits: dict[str, int],
+    subject_key: str,
+    authenticated: bool,
+    source: str = "default",
+    current_period_end: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "plan": plan,
+        "status": status,
+        "limits": limits,
+        "subject_key": subject_key,
+        "authenticated": authenticated,
+        "source": source,
+        "current_period_end": current_period_end,
+    }
+
+
+def public_entitlement_payload(entitlement: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "plan": entitlement["plan"],
+        "status": entitlement["status"],
+        "limits": entitlement["limits"],
+        "authenticated": entitlement["authenticated"],
+        "source": entitlement["source"],
+        "current_period_end": entitlement.get("current_period_end"),
+    }
+
+
+def current_entitlement(request: Request) -> dict[str, Any]:
+    user = read_google_session(request)
+    authenticated = bool(user)
+    subject_key = f"client:{rate_limit_client_key(request)}"
+    if user and user.get("sub"):
+        subject_key = f"user_sub:{user['sub']}"
+    elif user and user.get("email"):
+        subject_key = f"email:{user['email']}"
+
+    if os.getenv("SELF_HOSTED_FULL_ACCESS", "").lower() in {"1", "true", "yes", "on"}:
+        return entitlement_payload(
+            "self_hosted",
+            "active",
+            merge_entitlement_limits("self_hosted"),
+            subject_key,
+            authenticated,
+            "self_hosted",
+        )
+
+    lookup_keys: list[tuple[str, str]] = []
+    if user and user.get("sub"):
+        lookup_keys.append(("user_sub", str(user["sub"])))
+    if user and user.get("email"):
+        lookup_keys.append(("email", str(user["email"]).lower()))
+
+    with db() as conn:
+        for subject_type, subject_id in lookup_keys:
+            row = conn.execute(
+                """
+                SELECT * FROM entitlements
+                WHERE subject_type = ? AND subject_id = ?
+                """,
+                (subject_type, subject_id),
+            ).fetchone()
+            if entitlement_row_is_active(row):
+                return entitlement_payload(
+                    row["plan"],
+                    row["status"],
+                    merge_entitlement_limits(row["plan"], row["limits_json"]),
+                    f"{subject_type}:{subject_id}",
+                    authenticated,
+                    row["source"],
+                    row["current_period_end"],
+                )
+
+    plan = "free" if authenticated else "guest"
+    return entitlement_payload(plan, "active", merge_entitlement_limits(plan), subject_key, authenticated)
+
+
+def save_entitlement(payload: EntitlementInput) -> dict[str, Any]:
+    now = now_iso()
+    subject_id = payload.subject_id.lower() if payload.subject_type == "email" else payload.subject_id
+    custom_limits = {
+        key: value
+        for key, value in {
+            "requests_per_minute": payload.requests_per_minute,
+            "requests_per_day": payload.requests_per_day,
+            "max_tokens": payload.max_tokens,
+        }.items()
+        if value is not None
+    }
+    limits_json = json.dumps(custom_limits, separators=(",", ":"))
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO entitlements (
+                subject_type, subject_id, plan, status, limits_json, source,
+                external_id, current_period_end, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(subject_type, subject_id) DO UPDATE SET
+                plan = excluded.plan,
+                status = excluded.status,
+                limits_json = excluded.limits_json,
+                source = excluded.source,
+                external_id = excluded.external_id,
+                current_period_end = excluded.current_period_end,
+                updated_at = excluded.updated_at
+            """,
+            (
+                payload.subject_type,
+                subject_id,
+                payload.plan.strip().lower() or "supporter",
+                payload.status,
+                limits_json,
+                payload.source,
+                payload.external_id,
+                payload.current_period_end,
+                now,
+                now,
+            ),
+        )
+    return {
+        "subject_type": payload.subject_type,
+        "subject_id": subject_id,
+        "plan": payload.plan.strip().lower() or "supporter",
+        "status": payload.status,
+        "limits": merge_entitlement_limits(payload.plan, limits_json),
+        "source": payload.source,
+        "current_period_end": payload.current_period_end,
+    }
+
+
+def require_entitlement_secret(request: Request) -> bool:
+    secret = os.getenv("ENTITLEMENT_WEBHOOK_SECRET", "").strip()
+    if not secret:
+        raise HTTPException(status_code=404, detail="Internal entitlement endpoint is disabled")
+    provided = request.headers.get("x-hermex-entitlement-secret", "")
+    if not secrets.compare_digest(provided, secret):
+        raise HTTPException(status_code=401, detail="Invalid entitlement secret")
+    return True
+
+
 def rate_limit_client_key(request: Request) -> str:
     client_host = request.client.host if request.client else "unknown"
     if os.getenv("TRUST_PROXY_HEADERS", "").lower() in {"1", "true", "yes", "on"}:
@@ -568,17 +819,18 @@ def rate_limit_client_key(request: Request) -> str:
     return hashlib.sha256(f"{client_host}:{user_agent}".encode()).hexdigest()[:24]
 
 
-def enforce_ai_rate_limit(request: Request, profile_id: str | None = None) -> None:
-    config = get_llm_config()
-    minute_limit = max(1, int(config["requests_per_minute"]))
-    day_limit = max(1, int(config["requests_per_day"]))
+def enforce_ai_rate_limit(request: Request, profile_id: str | None = None) -> dict[str, Any]:
+    entitlement = current_entitlement(request)
+    request.state.hermex_entitlement = entitlement
+    minute_limit = max(1, int(entitlement["limits"]["requests_per_minute"]))
+    day_limit = max(1, int(entitlement["limits"]["requests_per_day"]))
     now = datetime.now(timezone.utc)
     stale_cutoff = now - timedelta(days=1)
     for bucket_key, bucket_events in list(RATE_LIMIT_BUCKETS.items()):
         bucket_events[:] = [event_time for event_time in bucket_events if event_time > stale_cutoff]
         if not bucket_events:
             RATE_LIMIT_BUCKETS.pop(bucket_key, None)
-    key = f"ai:{rate_limit_client_key(request)}"
+    key = f"ai:{entitlement['subject_key']}"
     events = RATE_LIMIT_BUCKETS.setdefault(key, [])
     events[:] = [event_time for event_time in events if now - event_time < timedelta(days=1)]
     minute_events = [event_time for event_time in events if now - event_time < timedelta(minutes=1)]
@@ -593,6 +845,7 @@ def enforce_ai_rate_limit(request: Request, profile_id: str | None = None) -> No
             detail=f"AI request limit reached: max {day_limit} request(s) per day.",
         )
     events.append(now)
+    return entitlement
 
 
 def now_iso() -> str:
@@ -1022,14 +1275,19 @@ def parse_sse_chat_content(text: str) -> str:
     return "".join(chunks).strip()
 
 
-async def call_llm(profile: dict[str, Any], language: str = "id", question: str | None = None) -> dict[str, Any]:
+async def call_llm(
+    profile: dict[str, Any],
+    language: str = "id",
+    question: str | None = None,
+    max_tokens_override: int | None = None,
+) -> dict[str, Any]:
     config = get_llm_config()
     provider = config["provider"]
     base_url = config["base_url"]
     api_key = config["api_key"]
     model = config["model"]
     temperature = config["temperature"]
-    max_tokens = config["max_tokens"]
+    max_tokens = normalize_limit_value(max_tokens_override, 128, 4000, config["max_tokens"])
 
     prompt_payload = {
         "profile_id": profile["profile_id"],
@@ -1165,7 +1423,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv(
         "CORS_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:18173,http://127.0.0.1:18173",
+        "http://localhost:5666,http://127.0.0.1:5666",
     ).split(","),
     allow_credentials=True,
     allow_methods=["*"],
@@ -1268,6 +1526,11 @@ async def google_auth_callback(
 def auth_me(request: Request) -> dict[str, Any]:
     user = read_google_session(request)
     return {"authenticated": bool(user), "user": user}
+
+
+@app.get("/api/v1/entitlement")
+def get_entitlement(request: Request) -> dict[str, Any]:
+    return public_entitlement_payload(current_entitlement(request))
 
 
 @app.get("/api/v1/auth/logout")
@@ -1617,8 +1880,12 @@ def admin_delete_sky_calendar(payload: AstrologyCalendarDeleteInput, request: Re
 @app.post("/api/v1/interpretation")
 async def interpretation(payload: InterpretationInput, request: Request) -> dict[str, Any]:
     profile = load_profile(payload.profile_id)
-    enforce_ai_rate_limit(request, profile["profile_id"])
-    llm_result = await call_llm(profile, language=payload.language)
+    entitlement = enforce_ai_rate_limit(request, profile["profile_id"])
+    llm_result = await call_llm(
+        profile,
+        language=payload.language,
+        max_tokens_override=entitlement["limits"]["max_tokens"],
+    )
     interpretation_id = str(uuid.uuid4())
     with db() as conn:
         conn.execute(
@@ -1650,8 +1917,13 @@ async def interpretation(payload: InterpretationInput, request: Request) -> dict
 @app.post("/api/v1/interpretation/ask")
 async def ask_interpretation_detail(payload: DetailedQuestionInput, request: Request) -> dict[str, Any]:
     profile = load_profile(payload.profile_id)
-    enforce_ai_rate_limit(request, profile["profile_id"])
-    llm_result = await call_llm(profile, language=payload.language, question=payload.question)
+    entitlement = enforce_ai_rate_limit(request, profile["profile_id"])
+    llm_result = await call_llm(
+        profile,
+        language=payload.language,
+        question=payload.question,
+        max_tokens_override=entitlement["limits"]["max_tokens"],
+    )
     interpretation_id = str(uuid.uuid4())
     with db() as conn:
         conn.execute(
@@ -1850,6 +2122,46 @@ async def update_admin_llm_config(payload: LLMConfigInput, _admin: bool = Depend
     if payload.requests_per_day is not None:
         set_setting("llm_requests_per_day", str(payload.requests_per_day))
     return {"status": "ok", "config": public_llm_config()}
+
+
+@app.get("/api/v1/admin/entitlements")
+def list_admin_entitlements(_admin: bool = Depends(require_admin)) -> dict[str, Any]:
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM entitlements
+            ORDER BY updated_at DESC
+            LIMIT 100
+            """
+        ).fetchall()
+    return {
+        "entitlements": [
+            {
+                "subject_type": row["subject_type"],
+                "subject_id": row["subject_id"],
+                "plan": row["plan"],
+                "status": row["status"],
+                "limits": merge_entitlement_limits(row["plan"], row["limits_json"]),
+                "source": row["source"],
+                "external_id": row["external_id"],
+                "current_period_end": row["current_period_end"],
+                "active": entitlement_row_is_active(row),
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        ]
+    }
+
+
+@app.post("/api/v1/admin/entitlements")
+def upsert_admin_entitlement(payload: EntitlementInput, _admin: bool = Depends(require_admin)) -> dict[str, Any]:
+    return {"status": "ok", "entitlement": save_entitlement(payload)}
+
+
+@app.post("/api/v1/internal/entitlement")
+def upsert_internal_entitlement(payload: EntitlementInput, request: Request) -> dict[str, Any]:
+    require_entitlement_secret(request)
+    return {"status": "ok", "entitlement": save_entitlement(payload)}
 
 
 @app.post("/api/v1/admin/llm-models")

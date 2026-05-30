@@ -28,6 +28,7 @@ Hermex turns birth context into a natal chart, shows readable astrology signals,
 - Local admin dashboard for overview, guest history, feedback, logs, prompt editing, and AI provider configuration.
 - OpenAI-compatible provider support with custom base URL, API key, model, temperature, max tokens, and model sync from `/models`.
 - Admin-controlled AI usage limits for requests per minute, requests per day, and max tokens.
+- Entitlement-ready usage layer for guest, free, supporter, and self-hosted plans without shipping payment-provider code.
 
 ## Stack
 
@@ -71,13 +72,13 @@ hermex/
 cd backend
 cp .env.example .env
 python3.11 -m pip install -r requirements.txt
-python3.11 -m uvicorn app.main:app --host 127.0.0.1 --port 18080 --reload
+python3.11 -m uvicorn app.main:app --host 127.0.0.1 --port 5667 --reload
 ```
 
 Backend URL:
 
 ```text
-http://127.0.0.1:18080
+http://127.0.0.1:5667
 ```
 
 ### 2. Frontend
@@ -86,13 +87,13 @@ http://127.0.0.1:18080
 cd frontend
 cp .env.example .env
 npm install
-npm run dev -- --host 127.0.0.1 --port 18173
+npm run dev -- --host 127.0.0.1 --port 5666
 ```
 
 Frontend URL:
 
 ```text
-http://127.0.0.1:18173
+http://127.0.0.1:5666
 ```
 
 ## Environment variables
@@ -108,9 +109,17 @@ LLM_TEMPERATURE=0.4
 LLM_MAX_TOKENS=700
 LLM_REQUESTS_PER_MINUTE=6
 LLM_REQUESTS_PER_DAY=40
+SUPPORTER_MAX_TOKENS=1800
+SUPPORTER_REQUESTS_PER_MINUTE=60
+SUPPORTER_REQUESTS_PER_DAY=1000
+SELF_HOSTED_FULL_ACCESS=false
+SELF_HOSTED_MAX_TOKENS=4000
+SELF_HOSTED_REQUESTS_PER_MINUTE=300
+SELF_HOSTED_REQUESTS_PER_DAY=10000
+ENTITLEMENT_WEBHOOK_SECRET=
 
 SQLITE_URL=sqlite:///./hermex.db
-CORS_ORIGINS=http://localhost:18173,http://127.0.0.1:18173
+CORS_ORIGINS=http://localhost:5666,http://127.0.0.1:5666
 PUBLIC_APP_URL=https://hermex.fun
 
 ADMIN_USERNAME=admin
@@ -130,7 +139,7 @@ Never commit real API keys. Runtime secrets are intentionally ignored by `.gitig
 Local dashboard:
 
 ```text
-http://127.0.0.1:18080/admin/dashboard
+http://127.0.0.1:5667/admin/dashboard
 ```
 
 Default local credentials:
@@ -161,9 +170,43 @@ The dashboard supports:
 - Usage limits for AI requests per minute, AI requests per day, and max tokens.
 - Feedback and log menus with guest export for local auditing.
 
+## Entitlement-ready usage layer
+
+Hermex keeps hosted payment-provider code out of the public repo. The open-source app only stores usage entitlements and applies plan-aware AI limits.
+
+This keeps the community edition clean:
+
+- Self-hosted users can run the app without any payment service.
+- Hosted maintainers can connect any private entitlement service later.
+- No provider-specific payment integration is required in this repository.
+
+Suggested hosted setup:
+
+1. Keep payment-provider code in a private service outside this repo.
+2. After a hosted entitlement changes, the private service calls `POST /api/v1/internal/entitlement`.
+3. Send `X-Hermex-Entitlement-Secret: <ENTITLEMENT_WEBHOOK_SECRET>` with a payload such as:
+
+```json
+{
+  "subject_type": "email",
+  "subject_id": "user@example.com",
+  "plan": "supporter",
+  "status": "active",
+  "requests_per_minute": 60,
+  "requests_per_day": 1000,
+  "max_tokens": 1800,
+  "source": "hosted-entitlement",
+  "external_id": "external-entitlement-id",
+  "current_period_end": "2026-06-30T23:59:59+07:00"
+}
+```
+
+Self-hosted users can ignore payment entirely and set `SELF_HOSTED_FULL_ACCESS=true`, or configure the global/admin limits to match their own deployment policy.
+
 ## API overview
 
 - `GET /api/v1/health`
+- `GET /api/v1/entitlement`
 - `POST /api/v1/birth/analyze`
 - `POST /api/v1/birth/validate`
 - `GET /api/v1/profiles/{profile_id}`
@@ -181,6 +224,9 @@ The dashboard supports:
 - `POST /api/v1/admin/prompt`
 - `POST /api/v1/admin/llm-config`
 - `POST /api/v1/admin/llm-models`
+- `GET /api/v1/admin/entitlements`
+- `POST /api/v1/admin/entitlements`
+- `POST /api/v1/internal/entitlement`
 
 Admin endpoints require dashboard login or HTTP Basic auth.
 
