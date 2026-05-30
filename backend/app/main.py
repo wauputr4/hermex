@@ -1927,9 +1927,9 @@ def create_public_profile(payload: PublicProfileInput, request: Request) -> dict
             owner_row = conn.execute(
                 "SELECT 1 FROM user_profiles WHERE user_sub = ? AND profile_id = ?",
                 (user_sub, payload.profile_id),
-            ).fetchone()
-            if not user_sub or not owner_row:
-                raise HTTPException(status_code=403, detail="Login required to update this public profile")
+            ).fetchone() if user_sub else None
+            if not owner_row and not has_valid_claim:
+                raise HTTPException(status_code=403, detail="Profile claim token or Google-linked ownership is required")
             conn.execute(
                 """
                 UPDATE public_profiles
