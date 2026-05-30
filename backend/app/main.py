@@ -558,10 +558,12 @@ def public_llm_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
 
 
 def rate_limit_client_key(request: Request) -> str:
-    forwarded_for = request.headers.get("x-forwarded-for", "")
-    client_host = forwarded_for.split(",", 1)[0].strip() if forwarded_for else ""
-    if not client_host:
-        client_host = request.client.host if request.client else "unknown"
+    client_host = request.client.host if request.client else "unknown"
+    if os.getenv("TRUST_PROXY_HEADERS", "").lower() in {"1", "true", "yes", "on"}:
+        forwarded_for = request.headers.get("x-forwarded-for", "")
+        trusted_host = forwarded_for.split(",", 1)[0].strip() if forwarded_for else ""
+        if trusted_host:
+            client_host = trusted_host
     user_agent = request.headers.get("user-agent", "unknown")[:120]
     return hashlib.sha256(f"{client_host}:{user_agent}".encode()).hexdigest()[:24]
 

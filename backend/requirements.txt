@@ -4,3 +4,4 @@ pydantic==2.10.4
 python-dotenv==1.0.1
 httpx==0.28.1
 pyswisseph==2.10.3.2
+python-multipart==0.0.20
