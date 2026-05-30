@@ -51,6 +51,12 @@ UNSAFE_SECRET_VALUES = {
     "change_this_admin_session_secret",
     "change_this_google_session_secret",
 }
+UNSAFE_ADMIN_PASSWORD_VALUES = {
+    "",
+    DEFAULT_ADMIN_PASSWORD,
+    "change_this_password",
+    "change_this_admin_password",
+}
 
 DEFAULT_SYSTEM_PROMPT = """
 Anda adalah Hermes, seorang ahli astrologi modern dan mentor reflektif.
@@ -404,9 +410,9 @@ def verify_admin_credentials(username_value: str, password_value: str) -> bool:
     username = os.getenv("ADMIN_USERNAME", "admin")
     password = os.getenv("ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
     session_secret = os.getenv("ADMIN_SESSION_SECRET", DEFAULT_ADMIN_SESSION_SECRET)
-    using_default_password = password == DEFAULT_ADMIN_PASSWORD
-    using_default_secret = session_secret == DEFAULT_ADMIN_SESSION_SECRET
-    if not is_local_public_app_url() and (using_default_password or using_default_secret):
+    unsafe_password = password in UNSAFE_ADMIN_PASSWORD_VALUES or password.lower().startswith("change_this")
+    unsafe_secret = session_secret in UNSAFE_SECRET_VALUES or session_secret.lower().startswith("change_this")
+    if not is_local_public_app_url() and (unsafe_password or unsafe_secret):
         return False
     valid_user = secrets.compare_digest(username_value, username)
     valid_password = secrets.compare_digest(password_value, password)
@@ -1261,7 +1267,6 @@ def latest_interpretation(profile_id: str, public_only: bool = False) -> dict[st
             FROM interpretations
             WHERE profile_id = ?
             ORDER BY created_at DESC
-            LIMIT 20
             """,
             (profile_id,),
         ).fetchall()
@@ -2835,7 +2840,13 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
 
           function setModels(models, selected) {{
             const unique = Array.from(new Set([selected, ...models].filter(Boolean)));
-            modelSelect.innerHTML = unique.map((model) => `<option value="${{model}}">${{model}}</option>`).join('');
+            while (modelSelect.firstChild) modelSelect.removeChild(modelSelect.firstChild);
+            unique.forEach((model) => {{
+              const option = document.createElement('option');
+              option.value = String(model);
+              option.textContent = String(model);
+              modelSelect.appendChild(option);
+            }});
             modelSelect.value = selected || unique[0] || '';
           }}
           setModels([], initialConfig.model);
