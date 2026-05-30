@@ -38,6 +38,9 @@ if not DB_PATH.is_absolute():
 
 security = HTTPBasic()
 RATE_LIMIT_BUCKETS: dict[str, list[datetime]] = {}
+ADMIN_COOKIE_NAME = "hermex_admin"
+GOOGLE_COOKIE_NAME = "hermex_google"
+OAUTH_STATE_COOKIE_NAME = "hermex_oauth_state"
 
 DEFAULT_SYSTEM_PROMPT = """
 Anda adalah Hermes, seorang ahli astrologi modern dan mentor reflektif.
@@ -394,15 +397,60 @@ def verify_admin_credentials(username_value: str, password_value: str) -> bool:
     return valid_user and valid_password
 
 
-def admin_session_token() -> str:
+def admin_session_secret() -> str:
     username = os.getenv("ADMIN_USERNAME", "admin")
     password = os.getenv("ADMIN_PASSWORD", "hermes-admin")
     secret = os.getenv("ADMIN_SESSION_SECRET", "hermex-local-admin-session")
-    return hashlib.sha256(f"{username}:{password}:{secret}".encode()).hexdigest()
+    return f"{username}:{password}:{secret}"
 
 
 def public_app_url() -> str:
     return os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:5666").strip().rstrip("/")
+
+
+def secure_cookie() -> bool:
+    return public_app_url().startswith("https://")
+
+
+def session_max_age(env_key: str, default_seconds: int) -> int:
+    try:
+        return max(60, int(os.getenv(env_key, str(default_seconds))))
+    except ValueError:
+        return default_seconds
+
+
+def signed_session_token(payload: dict[str, Any], secret: str) -> str:
+    body = json.dumps(payload, separators=(",", ":"))
+    signature = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+    return f"{body}.{signature}"
+
+
+def verify_signed_session_token(token: str | None, secret: str, max_age: int) -> dict[str, Any] | None:
+    if not token or "." not in token:
+        return None
+    body, signature = token.rsplit(".", 1)
+    expected = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+    if not secrets.compare_digest(signature, expected):
+        return None
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return None
+    try:
+        issued_at = int(payload.get("iat", 0))
+    except (TypeError, ValueError):
+        return None
+    now = int(datetime.now(timezone.utc).timestamp())
+    if issued_at <= 0 or issued_at > now + 60 or now - issued_at > max_age:
+        return None
+    return payload
+
+
+def admin_session_token() -> str:
+    return signed_session_token(
+        {"role": "admin", "iat": int(datetime.now(timezone.utc).timestamp())},
+        admin_session_secret(),
+    )
 
 
 def google_oauth_config() -> dict[str, str]:
@@ -422,7 +470,7 @@ def google_oauth_config() -> dict[str, str]:
 
 def google_session_token(user: dict[str, Any]) -> str:
     config = google_oauth_config()
-    payload = json.dumps(
+    return signed_session_token(
         {
             "sub": user.get("sub"),
             "email": user.get("email"),
@@ -430,28 +478,16 @@ def google_session_token(user: dict[str, Any]) -> str:
             "picture": user.get("picture"),
             "iat": int(datetime.now(timezone.utc).timestamp()),
         },
-        separators=(",", ":"),
+        config["session_secret"],
     )
-    signature = hmac.new(config["session_secret"].encode(), payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}.{signature}"
 
 
 def read_google_session(request: Request) -> dict[str, Any] | None:
-    token = request.cookies.get("hermex_google")
-    if not token or "." not in token:
-        return None
-    payload, signature = token.rsplit(".", 1)
-    expected = hmac.new(
-        google_oauth_config()["session_secret"].encode(),
-        payload.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-    if not secrets.compare_digest(signature, expected):
-        return None
-    try:
-        return json.loads(payload)
-    except json.JSONDecodeError:
-        return None
+    return verify_signed_session_token(
+        request.cookies.get(GOOGLE_COOKIE_NAME),
+        google_oauth_config()["session_secret"],
+        session_max_age("GOOGLE_SESSION_MAX_AGE_SECONDS", 60 * 60 * 24 * 30),
+    )
 
 
 def require_google_user(request: Request) -> dict[str, Any]:
@@ -462,8 +498,12 @@ def require_google_user(request: Request) -> dict[str, Any]:
 
 
 def is_admin_request(request: Request) -> bool:
-    cookie = request.cookies.get("hermex_admin")
-    if cookie and secrets.compare_digest(cookie, admin_session_token()):
+    session = verify_signed_session_token(
+        request.cookies.get(ADMIN_COOKIE_NAME),
+        admin_session_secret(),
+        session_max_age("ADMIN_SESSION_MAX_AGE_SECONDS", 60 * 60 * 8),
+    )
+    if session and session.get("role") == "admin":
         return True
 
     authorization = request.headers.get("authorization", "")
@@ -1460,11 +1500,12 @@ def google_auth_start() -> RedirectResponse:
     )
     response = RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{query}", status_code=302)
     response.set_cookie(
-        "hermex_oauth_state",
+        OAUTH_STATE_COOKIE_NAME,
         state,
         httponly=True,
         samesite="lax",
-        secure=public_app_url().startswith("https://"),
+        secure=secure_cookie(),
+        path="/",
         max_age=600,
     )
     return response
@@ -1480,7 +1521,7 @@ async def google_auth_callback(
     app_url = public_app_url()
     if error:
         return RedirectResponse(f"{app_url}/?auth=google_error", status_code=303)
-    expected_state = request.cookies.get("hermex_oauth_state")
+    expected_state = request.cookies.get(OAUTH_STATE_COOKIE_NAME)
     if not code or not state or not expected_state or not secrets.compare_digest(state, expected_state):
         return RedirectResponse(f"{app_url}/?auth=google_state_error", status_code=303)
 
@@ -1510,14 +1551,15 @@ async def google_auth_callback(
         return RedirectResponse(f"{app_url}/?auth=google_exchange_error", status_code=303)
 
     response = RedirectResponse(f"{app_url}/?auth=google_connected", status_code=303)
-    response.delete_cookie("hermex_oauth_state")
+    response.delete_cookie(OAUTH_STATE_COOKIE_NAME, path="/")
     response.set_cookie(
-        "hermex_google",
+        GOOGLE_COOKIE_NAME,
         google_session_token(user),
         httponly=True,
         samesite="lax",
-        secure=app_url.startswith("https://"),
-        max_age=60 * 60 * 24 * 30,
+        secure=secure_cookie(),
+        path="/",
+        max_age=session_max_age("GOOGLE_SESSION_MAX_AGE_SECONDS", 60 * 60 * 24 * 30),
     )
     return response
 
@@ -1536,7 +1578,7 @@ def get_entitlement(request: Request) -> dict[str, Any]:
 @app.get("/api/v1/auth/logout")
 def auth_logout() -> RedirectResponse:
     response = RedirectResponse(public_app_url(), status_code=303)
-    response.delete_cookie("hermex_google")
+    response.delete_cookie(GOOGLE_COOKIE_NAME, path="/")
     return response
 
 
@@ -1990,11 +2032,13 @@ async def admin_login(request: Request):
         return HTMLResponse(login_page("Username atau password salah."), status_code=401)
     response = RedirectResponse("/admin/dashboard", status_code=303)
     response.set_cookie(
-        "hermex_admin",
+        ADMIN_COOKIE_NAME,
         admin_session_token(),
         httponly=True,
         samesite="lax",
-        max_age=60 * 60 * 8,
+        secure=secure_cookie(),
+        path="/",
+        max_age=session_max_age("ADMIN_SESSION_MAX_AGE_SECONDS", 60 * 60 * 8),
     )
     return response
 

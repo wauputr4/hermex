@@ -125,11 +125,13 @@ PUBLIC_APP_URL=https://hermex.fun
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change_this_password
 ADMIN_SESSION_SECRET=change_this_session_secret
+ADMIN_SESSION_MAX_AGE_SECONDS=28800
 
 GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your_google_client_secret
 GOOGLE_REDIRECT_URI=https://hermex.fun/api/v1/auth/google/callback
 GOOGLE_SESSION_SECRET=change_this_google_session_secret
+GOOGLE_SESSION_MAX_AGE_SECONDS=2592000
 ```
 
 Never commit real API keys. Runtime secrets are intentionally ignored by `.gitignore`.
