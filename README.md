@@ -122,7 +122,7 @@ PUBLIC_WRITE_REQUESTS_PER_DAY=200
 
 SQLITE_URL=sqlite:///./hermex.db
 CORS_ORIGINS=http://localhost:5666,http://127.0.0.1:5666
-PUBLIC_APP_URL=https://hermex.fun
+PUBLIC_APP_URL=http://127.0.0.1:5666
 
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change_this_password
@@ -131,12 +131,16 @@ ADMIN_SESSION_MAX_AGE_SECONDS=28800
 
 GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_REDIRECT_URI=https://hermex.fun/api/v1/auth/google/callback
+GOOGLE_REDIRECT_URI=http://127.0.0.1:5667/api/v1/auth/google/callback
 GOOGLE_SESSION_SECRET=change_this_google_session_secret
 GOOGLE_SESSION_MAX_AGE_SECONDS=2592000
 ```
 
 Never commit real API keys. Runtime secrets are intentionally ignored by `.gitignore`.
+
+For hosted deployments, set `PUBLIC_APP_URL=https://hermex.fun`,
+`GOOGLE_REDIRECT_URI=https://hermex.fun/api/v1/auth/google/callback`, and replace all
+admin, Google, provider, and entitlement secrets with strong private values.
 
 ## Admin dashboard
 

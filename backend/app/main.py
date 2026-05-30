@@ -41,6 +41,16 @@ RATE_LIMIT_BUCKETS: dict[str, list[datetime]] = {}
 ADMIN_COOKIE_NAME = "hermex_admin"
 GOOGLE_COOKIE_NAME = "hermex_google"
 OAUTH_STATE_COOKIE_NAME = "hermex_oauth_state"
+DEFAULT_ADMIN_PASSWORD = "hermes-admin"
+DEFAULT_ADMIN_SESSION_SECRET = "hermex-local-admin-session"
+DEFAULT_GOOGLE_SESSION_SECRET = "hermex-local-google-session"
+UNSAFE_SECRET_VALUES = {
+    "",
+    DEFAULT_ADMIN_SESSION_SECRET,
+    DEFAULT_GOOGLE_SESSION_SECRET,
+    "change_this_admin_session_secret",
+    "change_this_google_session_secret",
+}
 
 DEFAULT_SYSTEM_PROMPT = """
 Anda adalah Hermes, seorang ahli astrologi modern dan mentor reflektif.
@@ -392,10 +402,10 @@ def init_db() -> None:
 
 def verify_admin_credentials(username_value: str, password_value: str) -> bool:
     username = os.getenv("ADMIN_USERNAME", "admin")
-    password = os.getenv("ADMIN_PASSWORD", "hermes-admin")
-    session_secret = os.getenv("ADMIN_SESSION_SECRET", "hermex-local-admin-session")
-    using_default_password = password == "hermes-admin"
-    using_default_secret = session_secret == "hermex-local-admin-session"
+    password = os.getenv("ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
+    session_secret = os.getenv("ADMIN_SESSION_SECRET", DEFAULT_ADMIN_SESSION_SECRET)
+    using_default_password = password == DEFAULT_ADMIN_PASSWORD
+    using_default_secret = session_secret == DEFAULT_ADMIN_SESSION_SECRET
     if not is_local_public_app_url() and (using_default_password or using_default_secret):
         return False
     valid_user = secrets.compare_digest(username_value, username)
@@ -405,8 +415,8 @@ def verify_admin_credentials(username_value: str, password_value: str) -> bool:
 
 def admin_session_secret() -> str:
     username = os.getenv("ADMIN_USERNAME", "admin")
-    password = os.getenv("ADMIN_PASSWORD", "hermes-admin")
-    secret = os.getenv("ADMIN_SESSION_SECRET", "hermex-local-admin-session")
+    password = os.getenv("ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
+    secret = os.getenv("ADMIN_SESSION_SECRET", DEFAULT_ADMIN_SESSION_SECRET)
     return f"{username}:{password}:{secret}"
 
 
@@ -414,12 +424,46 @@ def public_app_url() -> str:
     return os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:5666").strip().rstrip("/")
 
 
+def is_local_hostname(hostname: str | None) -> bool:
+    return (hostname or "").strip("[]").lower() in {"127.0.0.1", "localhost", "::1"}
+
+
 def is_local_public_app_url() -> bool:
     parsed = urllib.parse.urlparse(public_app_url())
-    return parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+    return parsed.scheme == "http" and is_local_hostname(parsed.hostname)
 
 
-def secure_cookie() -> bool:
+def request_hostname(request: Request) -> str | None:
+    host = request.headers.get("host") or request.url.hostname or ""
+    if os.getenv("TRUST_PROXY_HEADERS", "").lower() in {"1", "true", "yes", "on"}:
+        host = request.headers.get("x-forwarded-host") or host
+    return host.split(",", 1)[0].split(":", 1)[0].strip() or None
+
+
+def request_scheme(request: Request) -> str:
+    scheme = request.url.scheme
+    if os.getenv("TRUST_PROXY_HEADERS", "").lower() in {"1", "true", "yes", "on"}:
+        scheme = request.headers.get("x-forwarded-proto", scheme).split(",", 1)[0].strip().lower()
+    return scheme
+
+
+def is_local_request(request: Request) -> bool:
+    return request_scheme(request) == "http" and is_local_hostname(request_hostname(request))
+
+
+def hosted_context(request: Request | None = None) -> bool:
+    if request is not None:
+        return not is_local_request(request)
+    return not is_local_public_app_url()
+
+
+def secure_cookie(request: Request | None = None) -> bool:
+    if request is not None:
+        scheme = request_scheme(request)
+        if scheme == "https":
+            return True
+        if is_local_request(request):
+            return False
     return public_app_url().startswith("https://")
 
 
@@ -464,7 +508,22 @@ def admin_session_token() -> str:
     )
 
 
-def google_oauth_config() -> dict[str, str]:
+def google_session_secret(request: Request | None = None, raise_on_invalid: bool = False) -> str:
+    explicit_secret = os.getenv("GOOGLE_SESSION_SECRET", "").strip()
+    fallback_secret = os.getenv("ADMIN_SESSION_SECRET", DEFAULT_GOOGLE_SESSION_SECRET).strip()
+    secret = explicit_secret or fallback_secret
+    unsafe_secret = not explicit_secret or secret in UNSAFE_SECRET_VALUES or secret.lower().startswith("change_this")
+    if hosted_context(request) and unsafe_secret:
+        if raise_on_invalid:
+            raise HTTPException(
+                status_code=503,
+                detail="GOOGLE_SESSION_SECRET must be configured with a non-default value for hosted deployments",
+            )
+        return ""
+    return secret
+
+
+def google_oauth_config(request: Request | None = None) -> dict[str, str]:
     return {
         "client_id": os.getenv("GOOGLE_CLIENT_ID", "").strip(),
         "client_secret": os.getenv("GOOGLE_CLIENT_SECRET", "").strip(),
@@ -472,15 +531,11 @@ def google_oauth_config() -> dict[str, str]:
             "GOOGLE_REDIRECT_URI",
             "http://127.0.0.1:5667/api/v1/auth/google/callback",
         ).strip(),
-        "session_secret": os.getenv(
-            "GOOGLE_SESSION_SECRET",
-            os.getenv("ADMIN_SESSION_SECRET", "hermex-local-google-session"),
-        ).strip(),
+        "session_secret": google_session_secret(request),
     }
 
 
-def google_session_token(user: dict[str, Any]) -> str:
-    config = google_oauth_config()
+def google_session_token(user: dict[str, Any], request: Request | None = None) -> str:
     return signed_session_token(
         {
             "sub": user.get("sub"),
@@ -489,14 +544,17 @@ def google_session_token(user: dict[str, Any]) -> str:
             "picture": user.get("picture"),
             "iat": int(datetime.now(timezone.utc).timestamp()),
         },
-        config["session_secret"],
+        google_session_secret(request, raise_on_invalid=True),
     )
 
 
 def read_google_session(request: Request) -> dict[str, Any] | None:
+    secret = google_session_secret(request)
+    if not secret:
+        return None
     return verify_signed_session_token(
         request.cookies.get(GOOGLE_COOKIE_NAME),
-        google_oauth_config()["session_secret"],
+        secret,
         session_max_age("GOOGLE_SESSION_MAX_AGE_SECONDS", 60 * 60 * 24 * 30),
     )
 
@@ -1182,26 +1240,44 @@ def save_profile(profile: dict[str, Any]) -> None:
         )
 
 
-def latest_interpretation(profile_id: str) -> dict[str, Any] | None:
+def interpretation_is_public(request_payload_json: str | None) -> bool:
+    if not request_payload_json or request_payload_json == "{}":
+        return True
+    try:
+        request_payload = json.loads(request_payload_json)
+        messages = request_payload.get("messages", [])
+        user_message = next((item for item in reversed(messages) if item.get("role") == "user"), {})
+        prompt_payload = json.loads(user_message.get("content") or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+    return not prompt_payload.get("detail_question")
+
+
+def latest_interpretation(profile_id: str, public_only: bool = False) -> dict[str, Any] | None:
     with db() as conn:
-        row = conn.execute(
+        rows = conn.execute(
             """
-            SELECT id, provider, model, response_json, created_at
+            SELECT id, provider, model, request_payload_json, response_json, created_at
             FROM interpretations
             WHERE profile_id = ?
             ORDER BY created_at DESC
-            LIMIT 1
+            LIMIT 20
             """,
             (profile_id,),
-        ).fetchone()
-    if not row:
+        ).fetchall()
+    selected_row = None
+    for row in rows:
+        if not public_only or interpretation_is_public(row["request_payload_json"]):
+            selected_row = row
+            break
+    if not selected_row:
         return None
     return {
-        "interpretation_id": row["id"],
-        "provider": row["provider"],
-        "model": row["model"],
-        "interpretation": json.loads(row["response_json"]),
-        "created_at": row["created_at"],
+        "interpretation_id": selected_row["id"],
+        "provider": selected_row["provider"],
+        "model": selected_row["model"],
+        "interpretation": json.loads(selected_row["response_json"]),
+        "created_at": selected_row["created_at"],
     }
 
 
@@ -1212,7 +1288,7 @@ def public_profile_payload(row: sqlite3.Row) -> dict[str, Any]:
         "display_name": row["display_name"] or profile.get("display_name"),
         "bio": row["bio"],
         "profile": profile,
-        "latest_interpretation": latest_interpretation(row["profile_id"]),
+        "latest_interpretation": latest_interpretation(row["profile_id"], public_only=True),
         "public_url": f"{public_app_url()}/@{row['username']}",
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
@@ -1552,8 +1628,9 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/api/v1/auth/google/start")
-def google_auth_start() -> RedirectResponse:
-    config = google_oauth_config()
+def google_auth_start(request: Request) -> RedirectResponse:
+    google_session_secret(request, raise_on_invalid=True)
+    config = google_oauth_config(request)
     if not config["client_id"] or not config["client_secret"]:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
     state = secrets.token_urlsafe(24)
@@ -1574,7 +1651,7 @@ def google_auth_start() -> RedirectResponse:
         state,
         httponly=True,
         samesite="lax",
-        secure=secure_cookie(),
+        secure=secure_cookie(request),
         path="/",
         max_age=600,
     )
@@ -1595,7 +1672,8 @@ async def google_auth_callback(
     if not code or not state or not expected_state or not secrets.compare_digest(state, expected_state):
         return RedirectResponse(f"{app_url}/?auth=google_state_error", status_code=303)
 
-    config = google_oauth_config()
+    google_session_secret(request, raise_on_invalid=True)
+    config = google_oauth_config(request)
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             token_response = await client.post(
@@ -1624,10 +1702,10 @@ async def google_auth_callback(
     response.delete_cookie(OAUTH_STATE_COOKIE_NAME, path="/")
     response.set_cookie(
         GOOGLE_COOKIE_NAME,
-        google_session_token(user),
+        google_session_token(user, request),
         httponly=True,
         samesite="lax",
-        secure=secure_cookie(),
+        secure=secure_cookie(request),
         path="/",
         max_age=session_max_age("GOOGLE_SESSION_MAX_AGE_SECONDS", 60 * 60 * 24 * 30),
     )
@@ -1798,7 +1876,8 @@ def validate_birth(payload: ValidationInput, request: Request) -> dict[str, Any]
 
 @app.get("/api/v1/profiles/{profile_id}")
 def get_profile(profile_id: str) -> dict[str, Any]:
-    return load_profile(profile_id)
+    profile = load_profile(profile_id)
+    return {key: value for key, value in profile.items() if key != "claim_token"}
 
 
 @app.post("/api/v1/public-profiles")
@@ -2122,7 +2201,7 @@ async def admin_login(request: Request):
         admin_session_token(),
         httponly=True,
         samesite="lax",
-        secure=secure_cookie(),
+        secure=secure_cookie(request),
         path="/",
         max_age=session_max_age("ADMIN_SESSION_MAX_AGE_SECONDS", 60 * 60 * 8),
     )
