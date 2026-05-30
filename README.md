@@ -139,8 +139,10 @@ Never commit real API keys. Runtime secrets are intentionally ignored by `.gitig
 Local dashboard:
 
 ```text
-http://127.0.0.1:5667/admin/dashboard
+http://127.0.0.1:5666/admin/dashboard
 ```
+
+In local development, Vite proxies `/admin` and `/api/v1` from frontend port `5666` to backend port `5667`.
 
 Default local credentials:
 
