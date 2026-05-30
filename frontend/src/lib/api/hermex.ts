@@ -72,6 +72,7 @@ export async function publishPublicProfile(payload: {
   profile_id: string;
   username: string;
   email: string;
+  claim_token?: string;
   display_name?: string;
   bio?: string;
 }) {

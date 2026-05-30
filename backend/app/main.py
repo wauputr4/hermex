@@ -147,6 +147,7 @@ class PublicProfileInput(BaseModel):
     profile_id: str = Field(max_length=80)
     username: str = Field(min_length=3, max_length=32, pattern=r"^[a-z0-9_]+$")
     email: str = Field(min_length=5, max_length=160)
+    claim_token: str | None = Field(default=None, min_length=16, max_length=160)
     display_name: str | None = Field(default=None, max_length=80)
     bio: str | None = Field(default=None, max_length=240)
 
@@ -392,6 +393,11 @@ def init_db() -> None:
 def verify_admin_credentials(username_value: str, password_value: str) -> bool:
     username = os.getenv("ADMIN_USERNAME", "admin")
     password = os.getenv("ADMIN_PASSWORD", "hermes-admin")
+    session_secret = os.getenv("ADMIN_SESSION_SECRET", "hermex-local-admin-session")
+    using_default_password = password == "hermes-admin"
+    using_default_secret = session_secret == "hermex-local-admin-session"
+    if not is_local_public_app_url() and (using_default_password or using_default_secret):
+        return False
     valid_user = secrets.compare_digest(username_value, username)
     valid_password = secrets.compare_digest(password_value, password)
     return valid_user and valid_password
@@ -406,6 +412,11 @@ def admin_session_secret() -> str:
 
 def public_app_url() -> str:
     return os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:5666").strip().rstrip("/")
+
+
+def is_local_public_app_url() -> bool:
+    parsed = urllib.parse.urlparse(public_app_url())
+    return parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
 
 
 def secure_cookie() -> bool:
@@ -888,6 +899,37 @@ def enforce_ai_rate_limit(request: Request, profile_id: str | None = None) -> di
     return entitlement
 
 
+def enforce_public_write_rate_limit(
+    request: Request,
+    action: str,
+    minute_limit: int | None = None,
+    day_limit: int | None = None,
+) -> None:
+    minute_limit = minute_limit or env_int("PUBLIC_WRITE_REQUESTS_PER_MINUTE", 20)
+    day_limit = day_limit or env_int("PUBLIC_WRITE_REQUESTS_PER_DAY", 200)
+    now = datetime.now(timezone.utc)
+    stale_cutoff = now - timedelta(days=1)
+    for bucket_key, bucket_events in list(RATE_LIMIT_BUCKETS.items()):
+        bucket_events[:] = [event_time for event_time in bucket_events if event_time > stale_cutoff]
+        if not bucket_events:
+            RATE_LIMIT_BUCKETS.pop(bucket_key, None)
+    key = f"write:{action}:{rate_limit_client_key(request)}"
+    events = RATE_LIMIT_BUCKETS.setdefault(key, [])
+    events[:] = [event_time for event_time in events if now - event_time < timedelta(days=1)]
+    minute_events = [event_time for event_time in events if now - event_time < timedelta(minutes=1)]
+    if len(minute_events) >= minute_limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Write request limit reached: max {minute_limit} request(s) per minute.",
+        )
+    if len(events) >= day_limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Write request limit reached: max {day_limit} request(s) per day.",
+        )
+    events.append(now)
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -1178,10 +1220,38 @@ def public_profile_payload(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def public_profile_view(profile: dict[str, Any]) -> dict[str, Any]:
-    public_profile = json.loads(json.dumps(profile))
-    public_profile.pop("profile_id", None)
-    public_profile.pop("claim_token", None)
-    return public_profile
+    traits = profile.get("traits", {})
+    chart = profile.get("chart", {})
+    houses = chart.get("houses", {}).get("planet_houses", {})
+    planets = chart.get("planets", {})
+    public_planets = []
+    for name in ("sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn"):
+        planet = planets.get(name)
+        if not isinstance(planet, dict):
+            continue
+        public_planets.append(
+            {
+                "name": name,
+                "zodiac_sign": planet.get("zodiac_sign"),
+                "degree_in_sign": planet.get("degree_in_sign"),
+                "house": houses.get(name),
+            }
+        )
+    return {
+        "display_name": profile.get("display_name"),
+        "traits": {
+            "dominant_element": traits.get("dominant_element"),
+            "confidence": traits.get("confidence"),
+            "interests": list(traits.get("interests") or [])[:5],
+            "talents": list(traits.get("talents") or [])[:5],
+            "career_themes": list(traits.get("career_themes") or [])[:5],
+        },
+        "chart_highlights": {
+            "planets": public_planets,
+            "aspects_count": len(chart.get("aspects") or []),
+            "house_system": chart.get("houses", {}).get("house_system"),
+        },
+    }
 
 
 def default_sky_posts() -> list[dict[str, str]]:
@@ -1657,7 +1727,8 @@ def delete_user_history(profile_id: str, request: Request) -> dict[str, Any]:
 
 
 @app.post("/api/v1/birth/analyze")
-def analyze_birth(payload: BirthProfileInput) -> dict[str, Any]:
+def analyze_birth(payload: BirthProfileInput, request: Request) -> dict[str, Any]:
+    enforce_public_write_rate_limit(request, "birth_analyze")
     profile_id = str(uuid.uuid4())
     time_unknown = payload.birth_time is None
     chart = compute_chart(payload)
@@ -1707,7 +1778,8 @@ def analyze_birth(payload: BirthProfileInput) -> dict[str, Any]:
 
 
 @app.post("/api/v1/birth/validate")
-def validate_birth(payload: ValidationInput) -> dict[str, Any]:
+def validate_birth(payload: ValidationInput, request: Request) -> dict[str, Any]:
+    enforce_public_write_rate_limit(request, "birth_validate")
     profile = load_profile(payload.profile_id)
     score_boost = 0.16 if payload.answers else 0
     base_score = float(profile["traits"]["confidence"]["score"])
@@ -1731,6 +1803,7 @@ def get_profile(profile_id: str) -> dict[str, Any]:
 
 @app.post("/api/v1/public-profiles")
 def create_public_profile(payload: PublicProfileInput, request: Request) -> dict[str, Any]:
+    enforce_public_write_rate_limit(request, "public_profile", minute_limit=8, day_limit=60)
     profile = load_profile(payload.profile_id)
     username = payload.username.strip().lower()
     email = payload.email.strip().lower()
@@ -1738,6 +1811,12 @@ def create_public_profile(payload: PublicProfileInput, request: Request) -> dict
         raise HTTPException(status_code=422, detail="Valid email is required")
     user = read_google_session(request)
     user_sub = str((user or {}).get("sub") or "")
+    expected_claim_token = str(profile.get("claim_token") or "")
+    has_valid_claim = bool(
+        payload.claim_token
+        and expected_claim_token
+        and secrets.compare_digest(payload.claim_token, expected_claim_token)
+    )
 
     with db() as conn:
         existing_username = conn.execute(
@@ -1783,6 +1862,12 @@ def create_public_profile(payload: PublicProfileInput, request: Request) -> dict
                 ),
             )
         else:
+            owner_row = conn.execute(
+                "SELECT 1 FROM user_profiles WHERE user_sub = ? AND profile_id = ?",
+                (user_sub, payload.profile_id),
+            ).fetchone() if user_sub else None
+            if not owner_row and not has_valid_claim:
+                raise HTTPException(status_code=403, detail="Profile claim token or Google-linked ownership is required")
             conn.execute(
                 """
                 INSERT INTO public_profiles (username, profile_id, email, display_name, bio, created_at, updated_at)
@@ -1996,7 +2081,8 @@ async def ask_interpretation_detail(payload: DetailedQuestionInput, request: Req
 
 
 @app.post("/api/v1/feedback")
-def submit_feedback(payload: FeedbackInput) -> dict[str, Any]:
+def submit_feedback(payload: FeedbackInput, request: Request) -> dict[str, Any]:
+    enforce_public_write_rate_limit(request, "feedback", minute_limit=10, day_limit=100)
     feedback_id = str(uuid.uuid4())
     with db() as conn:
         conn.execute(
@@ -2746,7 +2832,8 @@ def admin_dashboard(request: Request, limit: int = 50) -> str:
 
 
 @app.post("/api/v1/quests/start")
-def start_quest(payload: QuestStartInput) -> dict[str, Any]:
+def start_quest(payload: QuestStartInput, request: Request) -> dict[str, Any]:
+    enforce_public_write_rate_limit(request, "quest_start")
     load_profile(payload.profile_id)
     quest_id = str(uuid.uuid4())
     quest = {
@@ -2768,7 +2855,8 @@ def start_quest(payload: QuestStartInput) -> dict[str, Any]:
 
 
 @app.post("/api/v1/quests/complete")
-def complete_quest(payload: QuestCompleteInput) -> dict[str, Any]:
+def complete_quest(payload: QuestCompleteInput, request: Request) -> dict[str, Any]:
+    enforce_public_write_rate_limit(request, "quest_complete")
     score = min(100, max(10, len(json.dumps(payload.result_payload)) // 3))
     with db() as conn:
         row = conn.execute("SELECT profile_id, quest_slug FROM user_quests WHERE id = ?", (payload.quest_id,)).fetchone()

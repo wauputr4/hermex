@@ -117,6 +117,8 @@ SELF_HOSTED_MAX_TOKENS=4000
 SELF_HOSTED_REQUESTS_PER_MINUTE=300
 SELF_HOSTED_REQUESTS_PER_DAY=10000
 ENTITLEMENT_WEBHOOK_SECRET=
+PUBLIC_WRITE_REQUESTS_PER_MINUTE=20
+PUBLIC_WRITE_REQUESTS_PER_DAY=200
 
 SQLITE_URL=sqlite:///./hermex.db
 CORS_ORIGINS=http://localhost:5666,http://127.0.0.1:5666
@@ -152,6 +154,10 @@ Default local credentials:
 username: admin
 password: hermes-admin
 ```
+
+The default admin password and session secret are accepted only for local
+`http://127.0.0.1` / `http://localhost` development. Hosted deployments must set
+`ADMIN_PASSWORD` and `ADMIN_SESSION_SECRET` to non-default values.
 
 Change them with:
 

@@ -504,6 +504,7 @@
         profile_id: profile.profile_id,
         username,
         email,
+        claim_token: profile.claim_token,
         display_name: display_name || profile.display_name,
         bio: lang === 'id' ? 'Profil astrology reflektif dari Hermex Quest.' : 'Reflective astrology profile from Hermex Quest.'
       });
