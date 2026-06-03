@@ -55,7 +55,7 @@ hermex/
 ├─ docs/
 │  ├─ PLAN.md
 │  ├─ ARCHITECTURE.md
-│  ├─ DEVELOPMENT.md
+│  ├─ DEPLOYMENT.md
 │  └─ LLM_INTEGRATION.md
 ├─ CONTRIBUTING.md
 ├─ SECURITY.md
@@ -267,11 +267,18 @@ The app treats astrology as symbolic reflection and learning material, not deter
 - Public Privacy URL for OAuth setup: `https://hermex.fun/privacy`
 - [docs/PLAN.md](docs/PLAN.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - [docs/LLM_INTEGRATION.md](docs/LLM_INTEGRATION.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [SECURITY.md](SECURITY.md)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+
+## Deployment notes
+
+Hermex is a PWA, so production releases must treat browser cache, service
+worker cache, and local storage as part of the deployment plan. Before shipping
+a hosted build, review [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), especially the
+PWA cache checklist and storage migration notes.
 
 ## Contributing
 

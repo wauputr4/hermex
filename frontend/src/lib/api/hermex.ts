@@ -1,5 +1,28 @@
 export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:5667';
 
+export class ApiError extends Error {
+  status: number;
+  detail: unknown;
+
+  constructor(message: string, status: number, detail?: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+async function readError(response: Response): Promise<ApiError> {
+  const text = await response.text();
+  try {
+    const data = JSON.parse(text);
+    const detail = data?.detail ?? data?.message ?? text;
+    return new ApiError(typeof detail === 'string' ? detail : JSON.stringify(detail), response.status, detail);
+  } catch {
+    return new ApiError(text || response.statusText, response.status, text);
+  }
+}
+
 export type BirthPayload = {
   display_name?: string;
   birth_date: string;
@@ -23,7 +46,7 @@ export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw await readError(response);
   }
 
   return response.json() as Promise<T>;
@@ -37,7 +60,7 @@ export async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
 
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw await readError(response);
   }
 
   return response.json() as Promise<T>;
@@ -54,7 +77,7 @@ export async function apiDelete<T>(path: string): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw await readError(response);
   }
 
   return response.json() as Promise<T>;
