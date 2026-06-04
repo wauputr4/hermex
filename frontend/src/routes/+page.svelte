@@ -20,7 +20,7 @@
       askHermes: 'Analisis Kosmik Saya', validating: 'Kunci kepastian', validate: 'Jawab validasi cepat', processingTitle: 'Hermes sedang membaca chart',
       processingBody: 'Menggabungkan posisi planet, zodiac, house, aspect, dan bahasa yang kamu pilih.', hermes: 'Analisis Kosmik Saya', summary: 'Ringkasan',
       strengths: 'Kekuatan', weaknesses: 'Kelemahan', love: 'Percintaan', interests: 'Minat', talents: 'Bakat', career: 'Arah Karier', fiveYear: 'Roadmap 5 tahun terakhir',
-      back: 'Kembali ke chart', askAgain: 'Tanya ulang Hermes', learn: 'Belajar Astrology', register: 'Daftar untuk penjelasan lengkap', feedback: 'Seberapa cocok hasilnya?', suggestion: 'Saran dan masukan (opsional)', sendFeedback: 'Kirim feedback', share: 'Publikasikan profil astrology', copied: 'Link tersalin', publishProfile: 'Buat halaman publik', publicProfile: 'Profile publik', username: 'Username', usernameHint: 'Username unik untuk shortlink Hermex.', registerTitle: 'Daftar untuk membaca detail lengkap', registerBody: 'Masuk untuk menyimpan progres lintas perangkat. Untuk MVP, Google login masih berupa opsi tampilan.', googleLogin: 'Lanjut dengan Google', email: 'Email', aiErrorTitle: 'Gagal menghubungkan AI Hermex', aiErrorBody: 'Hermes belum bisa terhubung ke provider AI. Chart kamu tetap aman; coba lagi sebentar lagi atau kembali ke chart.', aiLimitMinute: 'Limit AI sudah tercapai. Coba lagi besok.', aiLimitDay: 'Limit AI hari ini sudah habis. Coba lagi besok atau gunakan akun dengan limit lebih besar.', retry: 'Coba lagi', historyTitle: 'History Guest', emptyHistory: 'Belum ada history di perangkat ini.', askDetail: 'Tanya detail ke Hermex', askPlaceholder: 'Contoh: kenapa karier saya condong ke edukasi?', dailyQuest: 'Daily Cosmic Quest', dailyQuestBody: 'Claim refleksi harian untuk menyimpan streak guest dan badge lokal.', claimBadge: 'Claim badge hari ini', claimedBadge: 'Quest hari ini selesai', xp: 'XP', badges: 'Badge', accountTitle: 'Profile Saya', accountGuest: 'Belum login. Kamu tetap bisa memakai Hermex sebagai guest.', currentCard: 'Kartu karakter aktif', viewCard: 'Lihat kartu karakter', logout: 'Keluar', termsTitle: 'Syarat Google OAuth', termsIntro: 'Sebelum lanjut Google login, pahami dulu cara Hermex memakai data dan batas MVP open-source ini.', termsAccept: 'Saya setuju dan lanjut', termsBack: 'Baca nanti', ethics: 'Untuk refleksi dan pengembangan diri, bukan ramalan mutlak.'
+      back: 'Kembali ke chart', askAgain: 'Tanya ulang Hermes', learn: 'Belajar Astrology', register: 'Daftar untuk penjelasan lengkap', feedback: 'Seberapa cocok hasilnya?', suggestion: 'Saran dan masukan (opsional)', sendFeedback: 'Kirim feedback', share: 'Publikasikan profil astrology', copied: 'Link tersalin', publishProfile: 'Buat halaman publik', publicProfile: 'Profile publik', username: 'Username', usernameHint: 'Username unik untuk shortlink Hermex.', registerTitle: 'Daftar untuk membaca detail lengkap', registerBody: 'Masuk untuk menyimpan progres lintas perangkat. Untuk MVP, Google login masih berupa opsi tampilan.', googleLogin: 'Lanjut dengan Google', email: 'Email', aiErrorTitle: 'Gagal menghubungkan AI Hermex', aiErrorBody: 'Hermes belum bisa terhubung ke provider AI. Chart kamu tetap aman; coba lagi sebentar lagi atau kembali ke chart.', aiLimitMinute: 'Limit AI per menit tercapai. Coba lagi sebentar lagi.', aiLimitDay: 'Limit AI hari ini sudah habis. Coba lagi besok atau gunakan akun dengan limit lebih besar.', retry: 'Coba lagi', historyTitle: 'History Guest', emptyHistory: 'Belum ada history di perangkat ini.', askDetail: 'Tanya detail ke Hermex', askPlaceholder: 'Contoh: kenapa karier saya condong ke edukasi?', dailyQuest: 'Daily Cosmic Quest', dailyQuestBody: 'Claim refleksi harian untuk menyimpan streak guest dan badge lokal.', claimBadge: 'Claim badge hari ini', claimedBadge: 'Quest hari ini selesai', xp: 'XP', badges: 'Badge', accountTitle: 'Profile Saya', accountGuest: 'Belum login. Kamu tetap bisa memakai Hermex sebagai guest.', currentCard: 'Kartu karakter aktif', viewCard: 'Lihat kartu karakter', logout: 'Keluar', termsTitle: 'Syarat Google OAuth', termsIntro: 'Sebelum lanjut Google login, pahami dulu cara Hermex memakai data dan batas MVP open-source ini.', termsAccept: 'Saya setuju dan lanjut', termsBack: 'Baca nanti', ethics: 'Untuk refleksi dan pengembangan diri, bukan ramalan mutlak.'
     },
     en: {
       badge: 'Alpha game', title: 'Start your tiny astrology quest.',
@@ -31,7 +31,7 @@
       askHermes: 'My Cosmic Analysis', validating: 'Confidence key', validate: 'Answer quick validation', processingTitle: 'Hermes is reading your chart',
       processingBody: 'Combining planets, zodiac, houses, aspects, and your selected language.', hermes: 'My Cosmic Analysis', summary: 'Summary',
       strengths: 'Strengths', weaknesses: 'Weaknesses', love: 'Love', interests: 'Interests', talents: 'Talents', career: 'Career Paths', fiveYear: 'Last 5-Year Roadmap',
-      back: 'Back to chart', askAgain: 'Ask Hermes again', learn: 'Learn Astrology', register: 'Register for full explanation', feedback: 'How accurate did this feel?', suggestion: 'Suggestions and feedback (optional)', sendFeedback: 'Send feedback', share: 'Publish astrology profile', copied: 'Link copied', publishProfile: 'Create public page', publicProfile: 'Public profile', username: 'Username', usernameHint: 'Unique username for your Hermex shortlink.', registerTitle: 'Register to read the full detail', registerBody: 'Sign in to keep progress across devices. For this MVP, Google login is a visual option.', googleLogin: 'Continue with Google', email: 'Email', aiErrorTitle: 'Could not connect Hermex AI', aiErrorBody: 'Hermes could not reach the AI provider. Your chart is safe; try again in a moment or return to the chart.', aiLimitMinute: 'The AI limit has been reached. Try again tomorrow.', aiLimitDay: "Today's AI limit has been reached. Try again tomorrow or use an account with a higher limit.", retry: 'Retry', historyTitle: 'Guest History', emptyHistory: 'No local history on this device yet.', askDetail: 'Ask Hermex for detail', askPlaceholder: 'Example: why does my career lean toward education?', dailyQuest: 'Daily Cosmic Quest', dailyQuestBody: 'Claim a daily reflection to keep local guest streaks and badges.', claimBadge: 'Claim today badge', claimedBadge: 'Today quest complete', xp: 'XP', badges: 'Badges', accountTitle: 'My Profile', accountGuest: 'Not signed in yet. You can still use Hermex as a guest.', currentCard: 'Active character card', viewCard: 'View character card', logout: 'Logout', termsTitle: 'Google OAuth Terms', termsIntro: 'Before continuing with Google login, review how Hermex uses data and the current open-source MVP boundary.', termsAccept: 'I agree and continue', termsBack: 'Read later', ethics: 'For reflection and self-development, not deterministic prediction.'
+      back: 'Back to chart', askAgain: 'Ask Hermes again', learn: 'Learn Astrology', register: 'Register for full explanation', feedback: 'How accurate did this feel?', suggestion: 'Suggestions and feedback (optional)', sendFeedback: 'Send feedback', share: 'Publish astrology profile', copied: 'Link copied', publishProfile: 'Create public page', publicProfile: 'Public profile', username: 'Username', usernameHint: 'Unique username for your Hermex shortlink.', registerTitle: 'Register to read the full detail', registerBody: 'Sign in to keep progress across devices. For this MVP, Google login is a visual option.', googleLogin: 'Continue with Google', email: 'Email', aiErrorTitle: 'Could not connect Hermex AI', aiErrorBody: 'Hermes could not reach the AI provider. Your chart is safe; try again in a moment or return to the chart.', aiLimitMinute: 'The AI minute limit has been reached. Try again in a moment.', aiLimitDay: "Today's AI limit has been reached. Try again tomorrow or use an account with a higher limit.", retry: 'Retry', historyTitle: 'Guest History', emptyHistory: 'No local history on this device yet.', askDetail: 'Ask Hermex for detail', askPlaceholder: 'Example: why does my career lean toward education?', dailyQuest: 'Daily Cosmic Quest', dailyQuestBody: 'Claim a daily reflection to keep local guest streaks and badges.', claimBadge: 'Claim today badge', claimedBadge: 'Today quest complete', xp: 'XP', badges: 'Badges', accountTitle: 'My Profile', accountGuest: 'Not signed in yet. You can still use Hermex as a guest.', currentCard: 'Active character card', viewCard: 'View character card', logout: 'Logout', termsTitle: 'Google OAuth Terms', termsIntro: 'Before continuing with Google login, review how Hermex uses data and the current open-source MVP boundary.', termsAccept: 'I agree and continue', termsBack: 'Read later', ethics: 'For reflection and self-development, not deterministic prediction.'
     }
   } satisfies Record<Lang, Record<string, string>>;
 
@@ -54,9 +54,9 @@
   ];
   const toCityOption = (city: CityTimezoneMatch): CityOption => ({
     label: [city.city, city.province, city.country].filter(Boolean).join(', '),
-    latitude: Number(city.lat),
-    longitude: Number(city.lng),
-    timezone: city.timezone
+    latitude: Number.isFinite(Number(city.lat)) ? Number(city.lat) : 0,
+    longitude: Number.isFinite(Number(city.lng)) ? Number(city.lng) : 0,
+    timezone: city.timezone || 'UTC'
   });
   const uniqueCities = (cities: CityOption[]) => {
     const seen = new Set<string>();
@@ -69,7 +69,7 @@
   };
   const cityOptions: CityOption[] = uniqueCities(
     popularCityQueries.flatMap((query) => {
-      const matches = cityTimezones.findFromCityStateProvince(query) as CityTimezoneMatch[];
+      const matches = (cityTimezones.findFromCityStateProvince(query) || []) as CityTimezoneMatch[];
       return matches.slice(0, 1).map(toCityOption);
     })
   );
@@ -292,7 +292,7 @@
   function searchCities(query: string): CityOption[] {
     const normalized = query.trim();
     if (normalized.length < 2) return cityOptions.slice(0, 8);
-    const matches = cityTimezones.findFromCityStateProvince(normalized) as CityTimezoneMatch[];
+    const matches = (cityTimezones.findFromCityStateProvince(normalized) || []) as CityTimezoneMatch[];
     return uniqueCities(matches.map(toCityOption)).slice(0, 12);
   }
   function chooseCity(city: CityOption) { selectedCity = city; birth_place = city.label; cityQuery = city.label; cityPickerOpen = false; }
@@ -617,7 +617,8 @@
   function friendlyErrorMessage(err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     const lower = message.toLowerCase();
-    if (err instanceof ApiError && err.status === 429) {
+    const status = err && typeof err === 'object' && 'status' in err ? Number((err as { status?: unknown }).status) : undefined;
+    if (status === 429) {
       if (lower.includes('per day') || lower.includes('day')) return copy.aiLimitDay;
       if (lower.includes('per minute') || lower.includes('minute')) return copy.aiLimitMinute;
       return lang === 'id'

@@ -13,7 +13,12 @@ export class ApiError extends Error {
 }
 
 async function readError(response: Response): Promise<ApiError> {
-  const text = await response.text();
+  let text = '';
+  try {
+    text = await response.text();
+  } catch (err) {
+    return new ApiError(err instanceof Error ? err.message : response.statusText, response.status);
+  }
   try {
     const data = JSON.parse(text);
     const detail = data?.detail ?? data?.message ?? text;

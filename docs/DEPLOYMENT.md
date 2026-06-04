@@ -38,6 +38,16 @@ cookie/session mismatch, and Google OAuth redirect complexity.
 
 Set these backend variables for hosted deployments:
 
+Frontend build variable:
+
+```env
+# Same-origin deployment through the reverse proxy.
+# Leave empty only if your deployment intentionally uses relative API paths.
+VITE_API_BASE=https://hermex.fun
+```
+
+Backend variables:
+
 ```env
 PUBLIC_APP_URL=https://hermex.fun
 CORS_ORIGINS=https://hermex.fun
