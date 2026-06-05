@@ -10,7 +10,7 @@ export function mountQuestScene(target: HTMLElement, label = 'Reflection Quest')
     scene: {
       create() {
         const scene = this as Phaser.Scene;
-        scene.add.text(28, 32, 'Hermex Quest', {
+        scene.add.text(28, 32, 'Hermex Fun', {
           fontFamily: 'Georgia',
           fontSize: '28px',
           color: '#f7e6b1'

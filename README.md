@@ -1,6 +1,6 @@
-# Hermex Quest
+# Hermex Fun
 
-**Hermex Quest** is an open-source astrology learning game for reflective
+**Hermex Fun** is an open-source astrology learning game for reflective
 self-discovery.
 
 Hermex helps people enter birth data, explore a natal chart, learn basic

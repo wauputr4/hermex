@@ -2,7 +2,7 @@
   <title>Privacy Policy | Hermex</title>
   <meta
     name="description"
-    content="Privacy Policy for Hermex Quest, including guest storage, Google OAuth, AI provider data, and self-hosting boundaries."
+    content="Privacy Policy for Hermex Fun, including guest storage, Google OAuth, AI provider data, and self-hosting boundaries."
   />
 </svelte:head>
 

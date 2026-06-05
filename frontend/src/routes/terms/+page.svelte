@@ -2,7 +2,7 @@
   <title>Terms and Conditions | Hermex</title>
   <meta
     name="description"
-    content="Terms and Conditions for Hermex Quest, an open-source astrology learning and reflective self-development app."
+    content="Terms and Conditions for Hermex Fun, an open-source astrology learning and reflective self-development app."
   />
 </svelte:head>
 
@@ -12,7 +12,7 @@
     <p class="eyebrow">Hermex legal</p>
     <h1>Terms and Conditions</h1>
     <p class="lead">
-      Hermex Quest is an open-source astrology learning game for symbolic reflection,
+      Hermex Fun is an open-source astrology learning game for symbolic reflection,
       education, and self-development. By using Hermex, you agree to use the app as a
       reflective tool, not as deterministic advice.
     </p>
