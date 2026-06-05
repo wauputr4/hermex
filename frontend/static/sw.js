@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hermex-quest-v3';
+const CACHE_NAME = 'hermex-fun-v4';
 const APP_SHELL = ['/', '/offline.html', '/manifest.webmanifest', '/icons/hermex-star.svg'];
 
 self.addEventListener('install', (event) => {
