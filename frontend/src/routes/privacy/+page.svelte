@@ -2,7 +2,7 @@
   <title>Privacy Policy | Hermex</title>
   <meta
     name="description"
-    content="Privacy Policy for Hermex Quest, including guest storage, Google OAuth, AI provider data, and self-hosting boundaries."
+    content="Privacy Policy for Hermex Fun, including guest storage, Google OAuth, AI provider data, and self-hosting boundaries."
   />
 </svelte:head>
 
@@ -52,7 +52,17 @@
     </section>
 
     <section>
-      <h2>5. Hosted and self-hosted boundary</h2>
+      <h2>5. Analytics</h2>
+      <p>
+        Hermex can optionally load Google Analytics when a deployment operator sets a
+        Google Analytics measurement ID. This may send page-view and usage signals to
+        Google to help understand product usage. Local and self-hosted deployments can
+        leave analytics disabled by keeping this environment variable empty.
+      </p>
+    </section>
+
+    <section>
+      <h2>6. Hosted and self-hosted boundary</h2>
       <p>
         Self-hosted deployments are controlled by the operator who runs them. Hosted
         Hermex at hermex.fun may later add account sync, donation, subscription, and
@@ -61,7 +71,7 @@
     </section>
 
     <section>
-      <h2>6. Contact</h2>
+      <h2>7. Contact</h2>
       <p>
         For privacy questions, contact the project maintainer through the repository:
         <a href="https://github.com/wauputr4/hermex">github.com/wauputr4/hermex</a>.

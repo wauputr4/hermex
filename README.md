@@ -1,6 +1,6 @@
-# Hermex Quest
+# Hermex Fun
 
-**Hermex Quest** is an open-source astrology learning game for reflective
+**Hermex Fun** is an open-source astrology learning game for reflective
 self-discovery.
 
 Hermex helps people enter birth data, explore a natal chart, learn basic
@@ -110,6 +110,9 @@ Backend variables are documented in:
 Frontend variables are documented in:
 
 - [frontend/.env.example](frontend/.env.example)
+
+Google Analytics is opt-in through `VITE_GA_MEASUREMENT_ID`; leave it empty for
+self-hosted deployments that should not report usage to the hosted property.
 
 Never commit real API keys, OAuth secrets, admin passwords, or production
 session secrets.

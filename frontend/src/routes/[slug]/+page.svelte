@@ -51,7 +51,7 @@
 
 <main class="public-shell">
   <section class="public-card">
-    <a class="brand" href="/">Hermex Quest</a>
+    <a class="brand" href="/">Hermex Fun</a>
     {#if loading}
       <p>Loading public astrology profile...</p>
     {:else if error}
@@ -62,7 +62,7 @@
       <p class="eyebrow">Public astrology profile</p>
       <h1>@{publicProfile.username}</h1>
       <h2>{publicProfile.display_name || 'Hermex Guest'}</h2>
-      <p>{publicProfile.bio || 'Profile astrology reflektif dari Hermex Quest.'}</p>
+      <p>{publicProfile.bio || 'Profile astrology reflektif dari Hermex Fun.'}</p>
       <div class="chips">
         <span>{publicProfile.profile?.traits?.dominant_element}</span>
         {#each (publicProfile.profile?.traits?.interests ?? []).slice(0, 4) as item}

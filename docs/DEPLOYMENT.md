@@ -44,6 +44,11 @@ Frontend build variable:
 # Same-origin deployment through the reverse proxy.
 # Leave empty only if your deployment intentionally uses relative API paths.
 VITE_API_BASE=https://hermex.fun
+
+# Optional. Enables Google Analytics only for builds where this is set.
+# Leave empty for local development and self-hosted installs that should not
+# report usage to the hosted Hermex Fun property.
+VITE_GA_MEASUREMENT_ID=G-XXXXXXXXXX
 ```
 
 Backend variables:

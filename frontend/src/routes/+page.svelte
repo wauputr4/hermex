@@ -539,7 +539,7 @@
         email,
         claim_token: profile.claim_token,
         display_name: display_name || profile.display_name,
-        bio: lang === 'id' ? 'Profil astrology reflektif dari Hermex Quest.' : 'Reflective astrology profile from Hermex Quest.'
+        bio: lang === 'id' ? 'Profil astrology reflektif dari Hermex Fun.' : 'Reflective astrology profile from Hermex Fun.'
       });
       publicProfile = result.public_profile;
       usernameInput = publicProfile.username;
@@ -555,7 +555,7 @@
     shareLink = link;
     let copied = false;
     if (navigator.share) {
-      await navigator.share({ title: 'Hermex Quest', text: 'Coba lihat profile astrology Hermex ini.', url: link }).then(() => (copied = true)).catch(() => undefined);
+      await navigator.share({ title: 'Hermex Fun', text: 'Coba lihat profile astrology Hermex ini.', url: link }).then(() => (copied = true)).catch(() => undefined);
     }
     if (!copied && navigator.clipboard) {
       await navigator.clipboard.writeText(link).then(() => (copied = true)).catch(() => undefined);
@@ -667,12 +667,12 @@
   }
 </script>
 
-<svelte:head><title>Hermex Quest</title><meta name="theme-color" content="#f4c15d" /><link rel="manifest" href="/manifest.webmanifest" /><link rel="icon" href="/icons/hermex-star.svg" /></svelte:head>
+<svelte:head><title>Hermex Fun</title><meta name="theme-color" content="#f4c15d" /><link rel="manifest" href="/manifest.webmanifest" /><link rel="icon" href="/icons/hermex-star.svg" /></svelte:head>
 
 <main class="app-shell">
   <section class="phone-frame">
     <header class="topbar">
-      <button class="brand" type="button" on:click={() => (screen = 'home')}><svg viewBox="0 0 64 64"><path d="M32 5l7 17 18 2-14 12 4 18-15-10-15 10 4-18L7 24l18-2 7-17z"/><circle cx="25" cy="30" r="2.5"/><circle cx="39" cy="30" r="2.5"/><path d="M25 39c4 3 10 3 14 0"/></svg><div><p>{copy.badge}</p><strong>Hermex Quest</strong></div></button>
+      <button class="brand" type="button" on:click={() => (screen = 'home')}><svg viewBox="0 0 64 64"><path d="M32 5l7 17 18 2-14 12 4 18-15-10-15 10 4-18L7 24l18-2 7-17z"/><circle cx="25" cy="30" r="2.5"/><circle cx="39" cy="30" r="2.5"/><path d="M25 39c4 3 10 3 14 0"/></svg><div><p>{copy.badge}</p><strong>Hermex Fun</strong></div></button>
       {#if screen !== 'home'}<button class="ghost" on:click={() => (screen = 'home')}>{copy.edit}</button>{/if}<button class="lang" on:click={toggleLang}>{lang.toUpperCase()}</button>
     </header>
 

@@ -37,7 +37,7 @@
       <a class="brand" href="/">
         <span class="brand-mark">✧</span>
         <span>
-          <small>Hermex Quest</small>
+          <small>Hermex Fun</small>
           <strong>Berita Langit</strong>
         </span>
       </a>
