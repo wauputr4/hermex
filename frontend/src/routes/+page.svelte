@@ -4,6 +4,24 @@
   import { onMount } from 'svelte';
   import { API_BASE, analyzeBirth, askHermexDetail, deleteUserHistory, getAuthMe, getProfile, getPublicProfile, getSkyCalendar, getSkyNews, getUserHistory, interpretProfile, listPublicProfiles, publishPublicProfile, submitFeedback as submitFeedbackApi, syncUserHistory, validateBirth } from '$lib/api/hermex';
 
+  const GA_MEASUREMENT_ID = import.meta.env.VITE_GA_MEASUREMENT_ID?.trim() ?? '';
+
+  function installGoogleAnalytics() {
+    if (!GA_MEASUREMENT_ID || typeof window === 'undefined' || typeof document === 'undefined') return;
+    if (document.querySelector(`script[data-hermex-ga="${GA_MEASUREMENT_ID}"]`)) return;
+
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GA_MEASUREMENT_ID)}`;
+    script.dataset.hermexGa = GA_MEASUREMENT_ID;
+    document.head.appendChild(script);
+
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function gtag(...args: unknown[]){ window.dataLayer.push(args); };
+    window.gtag('js', new Date());
+    window.gtag('config', GA_MEASUREMENT_ID, { anonymize_ip: true });
+  }
+
   type Lang = 'id' | 'en';
   type Screen = 'home' | 'account' | 'profile' | 'hermes-loading' | 'hermes' | 'learn' | 'learn-detail' | 'register' | 'terms' | 'history' | 'connect' | 'public-profile' | 'sky-news' | 'sky-article' | 'hermes-chat' | 'ai-error';
   type GuestHistoryItem = { profile_id: string; display_name?: string; birth_place: string; created_at: string; dominant: string; profile: any; interpretation?: any; interpretation_id?: string; updated_at?: string; public_username?: string };
@@ -232,6 +250,7 @@
   }
 
   onMount(() => {
+    installGoogleAnalytics();
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => undefined);
     const draft = localStorage.getItem('hermex_guest_draft');
     if (draft) {

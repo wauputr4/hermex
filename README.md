@@ -111,6 +111,9 @@ Frontend variables are documented in:
 
 - [frontend/.env.example](frontend/.env.example)
 
+Google Analytics is opt-in through `VITE_GA_MEASUREMENT_ID`; leave it empty for
+self-hosted deployments that should not report usage to the hosted property.
+
 Never commit real API keys, OAuth secrets, admin passwords, or production
 session secrets.
 
