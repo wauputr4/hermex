@@ -1,3 +1,5 @@
+![Hermex Fun social preview](docs/assets/hermex-social-preview.png)
+
 # Hermex Fun
 
 **Hermex Fun** is an open-source astrology learning game for reflective
