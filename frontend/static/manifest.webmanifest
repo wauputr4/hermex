@@ -1,7 +1,7 @@
 {
   "name": "Hermex Fun",
   "short_name": "Hermex Fun",
-  "description": "Astrology learning game and reflective Hermes AI quest.",
+  "description": "Open-source astrology game for natal chart exploration, Hermes AI reflection, PWA guest history, and astrology learning.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
