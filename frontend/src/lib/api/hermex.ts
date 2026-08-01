@@ -38,6 +38,8 @@ export type BirthPayload = {
   timezone?: string;
 };
 
+export type QuestionnaireAnswer = Record<string, number>;
+
 export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     throw new Error('Hermex is offline. Saved guest history and education are still available.');
@@ -88,8 +90,23 @@ export async function apiDelete<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export async function apiPatch<T>(path: string, payload: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json() as Promise<T>;
+}
+
 export async function analyzeBirth(payload: BirthPayload) {
   return apiPost('/api/v1/birth/analyze', payload);
+}
+
+export async function getBirthQuestion(profile_id: string, claim_token: string, index: number) {
+  return apiPost('/api/v1/birth/question', { profile_id, claim_token, index });
 }
 
 export async function getProfile(profile_id: string) {
@@ -123,12 +140,16 @@ export async function getSkyCalendar() {
   return apiGet('/api/v1/sky-calendar');
 }
 
-export async function validateBirth(profile_id: string, answers: Record<string, string>) {
-  return apiPost('/api/v1/birth/validate', { profile_id, answers });
+export async function validateBirth(profile_id: string, claim_token: string, answers: QuestionnaireAnswer) {
+  return apiPost('/api/v1/birth/validate', { profile_id, claim_token, answers });
 }
 
 export async function interpretProfile(profile_id: string, language: 'id' | 'en') {
   return apiPost('/api/v1/interpretation', { profile_id, language });
+}
+
+export async function getFullInterpretation(interpretation_id: string) {
+  return apiGet(`/api/v1/interpretations/${encodeURIComponent(interpretation_id)}/full`);
 }
 
 export async function askHermexDetail(profile_id: string, language: 'id' | 'en', question: string) {
@@ -178,7 +199,17 @@ export async function getUserHistory() {
     profile: unknown;
     interpretation?: unknown;
     linked_at?: string;
+    public_username?: string | null;
+    is_public?: boolean;
   }> }>('/api/v1/user/history');
+}
+
+export async function getProfileSettings(profile_id: string) {
+  return apiGet<{ profile_id: string; username: string; is_public: boolean }>(`/api/v1/user/profile-settings/${encodeURIComponent(profile_id)}`);
+}
+
+export async function updateProfileSettings(profile_id: string, payload: { username: string; is_public: boolean }) {
+  return apiPatch(`/api/v1/user/profile-settings/${encodeURIComponent(profile_id)}`, payload);
 }
 
 export async function deleteUserHistory(profile_id: string) {
