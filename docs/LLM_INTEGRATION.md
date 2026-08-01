@@ -1,6 +1,8 @@
 # LLM Integration
 
-Hermex uses an OpenAI-compatible chat-completions API for narrative interpretation. Astrology math stays in the backend chart engine; the LLM only turns chart data into readable, constrained reflection.
+Hermex uses an OpenAI-compatible chat-completions API to create the
+chart-informed questionnaire and the narrative interpretation. Natal
+calculation stays in the backend chart engine.
 
 ## Configuration sources
 
@@ -51,6 +53,20 @@ That endpoint calls the configured provider at:
 GET {LLM_BASE_URL}/models
 ```
 
+## Questionnaire generation
+
+When a provider is configured, the backend sends its internal personality
+signals to the provider and requests ten plain-language statements rated from
+1 to 5. Questions must not expose astrology terminology. A deterministic
+fallback keeps local development and automated tests runnable without an AI
+provider.
+
+The public analyze response contains the scale and only the first
+`{id, prompt, index}` item. Later questions are requested one at a time using the
+profile claim token. Prompt text currently shown in the browser can be inspected;
+raw chart signals, the system prompt, remaining questions, and the provider's
+full payload are not included in the initial response.
+
 ## Chat-completions call
 
 Hermex calls:
@@ -74,7 +90,7 @@ Payload shape:
 }
 ```
 
-## Prompt payload
+## Interpretation prompt payload
 
 The user message includes:
 
@@ -86,10 +102,10 @@ The user message includes:
 - Placidus houses when available,
 - aspects,
 - derived traits,
-- roadmap preview,
-- validation answers.
+- personality signals,
+- validated questionnaire answers.
 
-## Required response JSON
+## Required interpretation response JSON
 
 The provider should return valid JSON with:
 

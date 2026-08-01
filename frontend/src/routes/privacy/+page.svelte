@@ -19,9 +19,8 @@
     <section>
       <h2>1. Local guest storage</h2>
       <p>
-        Hermex may save draft birth data, selected city, guest chart history, XP, streaks,
-        badges, and install preferences in your browser storage. This helps the app feel
-        installable and easy to reopen.
+        Hermex may save draft birth data, selected city, and recent analysis state in your
+        browser storage. This helps you continue an unfinished analysis.
       </p>
     </section>
 

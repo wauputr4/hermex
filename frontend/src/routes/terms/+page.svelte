@@ -1,145 +1,98 @@
 <svelte:head>
-  <title>Terms and Conditions | Hermex</title>
+  <title>Ketentuan Penggunaan | Hermex</title>
   <meta
     name="description"
-    content="Terms and Conditions for Hermex Fun, an open-source astrology learning and reflective self-development app."
+    content="Ketentuan penggunaan Hermex sebagai alat refleksi dan analisa kepribadian berbantuan AI."
   />
 </svelte:head>
 
-<main class="legal-shell">
+<main>
+  <header>
+    <a class="brand" href="/" aria-label="Kembali ke Hermex">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 5l5 12 13 2-10 8 3 13-11-7-11 7 3-13-10-8 13-2 5-12z" /></svg>
+      <span>Hermex</span>
+    </a>
+    <a class="back" href="/"><span aria-hidden="true">←</span> Kembali ke beranda</a>
+  </header>
+
   <article>
-    <a class="back" href="/">← Back to Hermex</a>
-    <p class="eyebrow">Hermex legal</p>
-    <h1>Terms and Conditions</h1>
-    <p class="lead">
-      Hermex Fun is an open-source astrology learning game for symbolic reflection,
-      education, and self-development. By using Hermex, you agree to use the app as a
-      reflective tool, not as deterministic advice.
-    </p>
-
-    <section>
-      <h2>1. Reflective use only</h2>
-      <p>
-        Hermex may show natal chart data, astrology education, AI-generated summaries,
-        career themes, relationship reflections, and roadmap suggestions. These outputs
-        are not medical, legal, financial, psychological, or life-critical advice.
+    <div class="intro">
+      <p class="eyebrow">Ketentuan penggunaan</p>
+      <h1>Gunakan hasilnya sebagai bahan refleksi.</h1>
+      <p class="lead">
+        Hermex membantu membaca pola kepribadian dari data kelahiran dan jawabanmu.
+        Dengan menggunakan layanan ini, kamu menyetujui ketentuan berikut.
       </p>
-    </section>
+      <p class="updated">Diperbarui 1 Agustus 2026</p>
+    </div>
 
-    <section>
-      <h2>2. Guest-first product</h2>
-      <p>
-        The MVP is designed to work as a guest experience. Your browser may store local
-        draft data, chart history, XP, streaks, badges, and install preferences so you can
-        reopen Hermex easily.
-      </p>
-    </section>
+    <div class="terms">
+      <section>
+        <span>01</span>
+        <div><h2>Bukan nasihat profesional</h2><p>Hasil Hermex bersifat reflektif dan dapat mengandung kekeliruan. Jangan menjadikannya pengganti nasihat medis, psikologis, hukum, keuangan, atau keputusan penting lainnya.</p></div>
+      </section>
 
-    <section>
-      <h2>3. Google OAuth</h2>
-      <p>
-        When Google login is enabled, Hermex will request only basic identity scopes such
-        as profile and email. Google login is intended for account identity, syncing
-        progress, and enabling hosted features. Your Google password is never handled by
-        Hermex.
-      </p>
-    </section>
+      <section>
+        <span>02</span>
+        <div><h2>Penggunaan sebagai tamu</h2><p>Kamu dapat mencoba analisa awal tanpa login. Browser dapat menyimpan data kelahiran, jawaban, dan progres sementara agar alur dapat dilanjutkan.</p></div>
+      </section>
 
-    <section>
-      <h2>4. Open-source and self-hosting</h2>
-      <p>
-        Self-hosted users can run the community edition with their own storage, domain,
-        and AI provider credentials. Hosted Hermex may later offer donation, subscription,
-        or premium access for owner-operated services.
-      </p>
-    </section>
+      <section>
+        <span>03</span>
+        <div><h2>Login dengan Google</h2><p>Login diperlukan untuk membuka hasil lengkap dan menghubungkannya ke akunmu. Hermex hanya meminta identitas dasar seperti nama, email, dan foto profil. Hermex tidak menerima kata sandi Google milikmu.</p></div>
+      </section>
 
-    <section>
-      <h2>5. AI provider behavior</h2>
-      <p>
-        AI responses depend on the configured provider, model, prompt, usage limits, and
-        chart payload. Hermex does not guarantee that AI output is complete, error-free,
-        or suitable for critical decisions.
-      </p>
-    </section>
+      <section>
+        <span>04</span>
+        <div><h2>Analisa berbantuan AI</h2><p>Hasil bergantung pada model, konfigurasi, dan data yang diberikan. Hermex tidak menjamin setiap keluaran AI selalu lengkap, akurat, atau sesuai untuk semua keadaan.</p></div>
+      </section>
 
-    <section>
-      <h2>6. Contact</h2>
-      <p>
-        For questions about these terms, contact the project maintainer through the public
-        repository: <a href="https://github.com/wauputr4/hermex">github.com/wauputr4/hermex</a>.
-      </p>
-    </section>
+      <section>
+        <span>05</span>
+        <div><h2>Penggunaan yang wajar</h2><p>Jangan menyalahgunakan layanan, mencoba melewati batas akses, mengganggu sistem, atau menggunakan Hermex untuk merugikan orang lain.</p></div>
+      </section>
+
+      <section>
+        <span>06</span>
+        <div><h2>Open source dan self-hosting</h2><p>Versi self-hosted dikelola oleh operator masing-masing. Penyimpanan data, penyedia AI, dan kebijakan operasionalnya menjadi tanggung jawab operator tersebut.</p></div>
+      </section>
+    </div>
+
+    <aside>
+      <h2>Ada pertanyaan?</h2>
+      <p>Hubungi pengelola melalui <a href="https://github.com/wauputr4/hermex">repositori Hermex di GitHub</a>.</p>
+    </aside>
   </article>
 </main>
 
 <style>
-  :global(body) {
-    margin: 0;
-    color: #45304f;
-    background: radial-gradient(circle at 14% 10%, rgba(244, 193, 93, .48), transparent 22rem),
-      radial-gradient(circle at 82% 12%, rgba(128, 213, 187, .42), transparent 24rem),
-      linear-gradient(145deg, #fff8df, #f5e4ee 54%, #dff5ed);
-    font-family: Avenir Next, Nunito, Trebuchet MS, sans-serif;
-  }
-
-  .legal-shell {
-    min-height: 100vh;
-    padding: 28px;
-    display: grid;
-    place-items: start center;
-  }
-
-  article {
-    width: min(860px, 100%);
-    border: 4px solid rgba(69, 48, 79, .12);
-    border-radius: 34px;
-    background: rgba(255, 253, 247, .9);
-    padding: clamp(22px, 5vw, 44px);
-    box-shadow: 0 28px 80px rgba(69, 48, 79, .14);
-  }
-
-  .back {
-    display: inline-flex;
-    margin-bottom: 20px;
-    color: #45304f;
-    font-weight: 950;
-    text-decoration: none;
-  }
-
-  .eyebrow {
-    margin: 0 0 8px;
-    color: #8f6884;
-    font-size: .78rem;
-    font-weight: 950;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    margin: 0 0 16px;
-    font-size: clamp(2.4rem, 8vw, 5.2rem);
-    line-height: .9;
-    letter-spacing: -.07em;
-  }
-
-  h2 {
-    margin: 28px 0 8px;
-  }
-
-  p {
-    color: rgba(69, 48, 79, .76);
-    font-weight: 760;
-    line-height: 1.65;
-  }
-
-  .lead {
-    font-size: 1.1rem;
-    color: #45304f;
-  }
-
-  a {
-    color: #365f90;
-    font-weight: 900;
+  :global(body) { margin: 0; background: #fbfaf7; color: #302a36; font-family: Avenir Next, Nunito, Trebuchet MS, sans-serif; }
+  main { width: min(1060px, calc(100% - 40px)); margin: auto; }
+  header { display: flex; min-height: 84px; align-items: center; justify-content: space-between; border-bottom: 1px solid #e7e1d9; }
+  .brand { display: flex; align-items: center; gap: 10px; color: #302a36; font-size: 1.1rem; font-weight: 820; text-decoration: none; }
+  .brand svg { width: 34px; height: 34px; box-sizing: border-box; padding: 6px; border-radius: 11px; background: #fff0ce; fill: #f1b86a; stroke: #302a36; stroke-width: 1.5; }
+  .back { display: inline-flex; align-items: center; gap: 7px; color: #615968; font-size: .92rem; font-weight: 700; text-decoration: none; }
+  article { padding: clamp(56px, 9vw, 104px) 0 80px; }
+  .intro { max-width: 780px; border-left: 5px solid #5b55d6; padding-left: clamp(20px, 4vw, 40px); }
+  .eyebrow { margin: 0 0 14px; color: #5b55d6; font-size: .76rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+  h1 { max-width: 720px; margin: 0; font-size: clamp(2.7rem, 7vw, 5.4rem); line-height: .96; letter-spacing: -.06em; }
+  .lead { max-width: 680px; margin: 28px 0 14px; color: #615968; font-size: clamp(1rem, 1.8vw, 1.2rem); line-height: 1.65; }
+  .updated { margin: 0; color: #8a828b; font-size: .82rem; }
+  .terms { margin-top: clamp(58px, 9vw, 96px); border-top: 1px solid #d7d0ca; }
+  section { display: grid; grid-template-columns: 52px 1fr; gap: 24px; padding: 30px 0; border-bottom: 1px solid #e7e1d9; }
+  section > span { color: #5b55d6; font-size: .78rem; font-weight: 800; letter-spacing: .06em; }
+  h2 { margin: 0 0 8px; font-size: clamp(1.15rem, 2vw, 1.4rem); letter-spacing: -.02em; }
+  section p, aside p { max-width: 720px; margin: 0; color: #615968; line-height: 1.7; }
+  aside { margin-top: 48px; border-radius: 18px; padding: 28px; background: #f2f0ff; }
+  aside a { color: #4e48c8; font-weight: 750; }
+  a:focus-visible { border-radius: 6px; outline: 3px solid rgba(91,85,214,.28); outline-offset: 4px; }
+  @media (max-width: 560px) {
+    main { width: min(100% - 28px, 1060px); }
+    header { min-height: 72px; }
+    .back { font-size: 0; }
+    .back::after { content: 'Kembali'; font-size: .88rem; }
+    article { padding-top: 44px; }
+    section { grid-template-columns: 36px 1fr; gap: 12px; padding: 24px 0; }
+    aside { padding: 22px; }
   }
 </style>

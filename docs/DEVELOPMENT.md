@@ -28,6 +28,9 @@ Admin dashboard:
 http://127.0.0.1:5666/admin/dashboard
 ```
 
+Use this frontend URL for admin access. The existing Vite proxy forwards
+`/admin/*` to the backend on port `5667`.
+
 Default local admin credentials:
 
 ```text
@@ -72,11 +75,11 @@ It can also sync model options from the configured endpoint's `/models` route.
 ## Local smoke flow
 
 1. Open the frontend.
-2. Fill birth date, time, city, email, and optional name.
-3. Click **Buka Astrologyku**.
-4. Inspect the natal chart, planets, houses, and aspects.
-5. Click **Analisis Kosmik Saya**.
-6. Check the admin dashboard for saved guest history and prompt payload.
+2. Fill the birth date, optional time, and city.
+3. Click **Mulai Analisis** and complete the 1–5 questionnaire.
+4. Confirm the guest preview and username recommendations appear.
+5. Login with Google and confirm the complete analysis and natal-chart detail are available.
+6. Check `/admin/dashboard` on port `5666` for the saved analysis and prompt payload.
 
 ## Recommended quality tools
 

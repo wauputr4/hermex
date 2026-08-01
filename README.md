@@ -2,59 +2,30 @@
 
 # Hermex Fun
 
-**Hermex Fun** is an open-source astrology learning game for reflective
-self-discovery.
+Hermex is an open-source personality analysis app based on birth place, date,
+and time. It combines a natal calculation, a short 1–5 questionnaire, and an
+AI-assisted interpretation for reflective self-discovery—not deterministic
+medical, legal, financial, or life advice.
 
-Hermex helps people enter birth data, explore a natal chart, learn basic
-astrology concepts, and receive a concise AI-assisted reflection. The goal is
-not fortune-telling. Hermex is designed as a playful, educational, and
-non-deterministic way to understand patterns, strengths, interests, relationship
-themes, and career exploration.
-
-Website target: **https://hermex.fun**
-
+Website: **https://hermex.fun**
 Repository: **https://github.com/wauputr4/hermex**
 
-## What Hermex is for
+## How it works
 
-Hermex is useful for:
+1. Enter a birth date, optional birth time, and birth location. When time is
+   omitted, Hermex uses `00:00` and clearly marks the result as less precise.
+2. Answer ten plain-language statements from 1 to 5. When an AI provider is
+   configured, the backend creates the questions from the calculated signals;
+   local and test environments can use a deterministic fallback.
+3. Receive a guest preview and editable username suggestions. Google login
+   unlocks the complete analysis and the detailed natal-chart view.
 
-- Learning astrology through a friendly product experience.
-- Creating a simple natal chart from birth date, time, and place.
-- Exploring zodiac signs, planets, houses, and aspects in plain language.
-- Turning chart signals into reflective prompts and personal insights.
-- Saving guest history locally so one-time visitors can come back later.
-- Publishing a lightweight astrology profile page, similar to a bio link.
-- Collecting feedback to improve the AI interpretation quality.
-- Running a self-hosted astrology education MVP with your own AI provider.
+The browser receives one question id and prompt at a time plus the rating scale,
+so the currently displayed question remains inspectable. Internal chart signals,
+the system prompt, the remaining questions, and the complete interpretation stay
+on the backend until the relevant request needs them.
 
-Hermex is intentionally open source. Self-hosted users can run the community
-edition with their own infrastructure and AI credentials.
-
-## MVP features
-
-- Mobile-first SvelteKit app with installable PWA behavior.
-- Offline-friendly guest experience with local storage.
-- Birth profile form with city search, latitude, longitude, and timezone data.
-- Natal chart calculation using Swiss Ephemeris.
-- SVG natal-wheel visualization.
-- AI-assisted Hermes interpretation using an OpenAI-compatible provider.
-- Structured insight cards for strengths, weaknesses, love, interests, talents,
-  career direction, and last-5-year roadmap.
-- Astrology education pages for planets, zodiac signs, houses, and aspects.
-- Berita Langit article/calendar concept for astrology education content.
-- Guest profile, history, and public shortlink-style profile flow.
-- Admin dashboard for prompt editing, provider settings, usage limits, feedback,
-  logs, and content management.
-- Entitlement-ready usage layer for future hosted subscription/billing without
-  embedding private payment-provider code in the public repo.
-
-## Project status
-
-Hermex is currently in **beta MVP**.
-
-The project is ready for experimentation, self-hosting, and contribution, but
-the product should still be treated as an evolving educational prototype.
+Berita Langit remains available as article cards below the main analysis flow.
 
 ## Quick start
 
@@ -76,99 +47,82 @@ npm install
 npm run dev -- --host 127.0.0.1 --port 5666
 ```
 
-Open:
+Open `http://127.0.0.1:5666`.
 
-```text
-http://127.0.0.1:5666
+## Environment and AI provider
+
+Backend configuration lives in `backend/.env`. Start from
+[`backend/.env.example`](backend/.env.example), then configure at minimum:
+
+```env
+LLM_PROVIDER=openai_compat
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=your_api_key
+LLM_MODEL=gpt-4o-mini
 ```
 
-The local frontend proxies API and admin routes to the backend.
+Provider settings can also be updated through the admin dashboard. Local
+SQLite settings override `.env` values. Never commit real API keys, OAuth
+secrets, admin credentials, or production session secrets.
+
+See [`docs/LLM_INTEGRATION.md`](docs/LLM_INTEGRATION.md) for the provider
+contract and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for production settings.
 
 ## Admin dashboard
 
-Local dashboard:
+The frontend and admin dashboard use one public port:
 
 ```text
 http://127.0.0.1:5666/admin/dashboard
 ```
 
-Default local credentials:
+Vite forwards `/admin/*` to FastAPI on port `5667` during local development.
+
+Local credentials:
 
 ```text
 username: admin
 password: hermes-admin
 ```
 
-Change the admin password and session secret before any hosted deployment.
+These defaults are for localhost only. Replace the password and session secret
+with strong, unique values before exposing Hermex outside local development.
 
-## Environment setup
+## Google authentication
 
-Backend variables are documented in:
+Hosted full results require a Google session and profile ownership. Configure:
 
-- [backend/.env.example](backend/.env.example)
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-- [docs/LLM_INTEGRATION.md](docs/LLM_INTEGRATION.md)
+```env
+GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=http://127.0.0.1:5666/api/v1/auth/google/callback
+GOOGLE_SESSION_SECRET=replace_with_a_strong_secret
+```
 
-Frontend variables are documented in:
+Add the exact same callback to the OAuth client's **Authorized redirect URIs**
+in Google Cloud Console. For local development that URI is:
+`http://127.0.0.1:5666/api/v1/auth/google/callback`. `localhost`, another port,
+or a different path is treated as a different URI by Google.
 
-- [frontend/.env.example](frontend/.env.example)
+The guest analysis is linked to the signed-in account through the existing
+profile claim flow. Guests and other accounts cannot fetch the complete result.
+Self-hosted operators may explicitly set `SELF_HOSTED_FULL_ACCESS=true`.
 
-Google Analytics is opt-in through `VITE_GA_MEASUREMENT_ID`; leave it empty for
-self-hosted deployments that should not report usage to the hosted property.
+## Tests and documentation
 
-Never commit real API keys, OAuth secrets, admin passwords, or production
-session secrets.
+```bash
+(cd backend && .venv/bin/python -m unittest discover -s tests -v)
+cd frontend && npm run build
+```
 
-## Deployment and PWA cache
+- [Development guide](docs/DEVELOPMENT.md)
+- [Architecture and API contract](docs/ARCHITECTURE.md)
+- [LLM integration](docs/LLM_INTEGRATION.md)
+- [Deployment guide](docs/DEPLOYMENT.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
-Because Hermex is a PWA, production deployments must handle service worker
-cache, browser cache, and local guest storage carefully.
-
-Read the deployment checklist before releasing:
-
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-
-That guide includes cache headers, service worker update notes, local storage
-migration guidance, reverse proxy notes, and release smoke-test steps.
-
-## Documentation
-
-- [docs/PLAN.md](docs/PLAN.md)
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-- [docs/LLM_INTEGRATION.md](docs/LLM_INTEGRATION.md)
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-- [SECURITY.md](SECURITY.md)
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-
-Public legal pages for hosted OAuth verification:
-
-- `https://hermex.fun/terms`
-- `https://hermex.fun/privacy`
-
-## Contributing
-
-Issues and pull requests are welcome.
-
-Good contributions include:
-
-- Improving mobile UI and accessibility.
-- Improving astrology education content.
-- Improving natal chart visualization.
-- Hardening auth, sessions, rate limits, and deployment docs.
-- Adding tests around chart calculation, profile publishing, and admin flows.
-- Improving PWA offline and update behavior.
-
-Please avoid committing real user data, secrets, or provider-specific private
-billing code.
-
-## Ethics
-
-Hermex is a reflective game and education tool. It should support curiosity,
-self-understanding, and personal development.
-
-Hermex should not be used as deterministic advice for medical, legal,
-financial, or life-critical decisions.
+Public legal pages are available at `/terms` and `/privacy`.
 
 ## License
 

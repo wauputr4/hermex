@@ -11,7 +11,7 @@ Thanks for helping improve Hermex.
    - `docs/ARCHITECTURE.md`
    - `docs/DEVELOPMENT.md`
    - `docs/LLM_INTEGRATION.md`
-3. Create a feature branch from `main`, for example `feat/quest-ui-basic`.
+3. Create a feature branch from `main`, for example `feat/personality-preview`.
 
 ## Contribution standards
 
@@ -33,7 +33,7 @@ Use Conventional Commits:
 ## Pull request checklist
 
 - [ ] Briefly summarize behavior changes.
-- [ ] Attach screenshots or recordings for gameplay/UI changes.
+- [ ] Attach screenshots or recordings for product/UI changes.
 - [ ] Include reproduction steps for bug fixes.
 - [ ] Update docs if scope changes.
 - [ ] Confirm no secrets are committed.
