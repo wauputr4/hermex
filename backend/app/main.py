@@ -1009,20 +1009,25 @@ def rate_limit_client_key(request: Request) -> str:
     return hashlib.sha256(f"{client_host}:{user_agent}".encode()).hexdigest()[:24]
 
 
+def _cleanup_rate_limit_bucket(events: list[datetime], now: datetime) -> list[datetime]:
+    cutoff = now - timedelta(days=1)
+    return [event_time for event_time in events if event_time > cutoff]
+
+
 def enforce_ai_rate_limit(request: Request, profile_id: str | None = None) -> dict[str, Any]:
     entitlement = current_entitlement(request)
     request.state.hermex_entitlement = entitlement
     minute_limit = max(1, int(entitlement["limits"]["requests_per_minute"]))
     day_limit = max(1, int(entitlement["limits"]["requests_per_day"]))
     now = datetime.now(timezone.utc)
-    stale_cutoff = now - timedelta(days=1)
-    for bucket_key, bucket_events in list(RATE_LIMIT_BUCKETS.items()):
-        bucket_events[:] = [event_time for event_time in bucket_events if event_time > stale_cutoff]
-        if not bucket_events:
-            RATE_LIMIT_BUCKETS.pop(bucket_key, None)
     key = f"ai:{entitlement['subject_key']}"
-    events = RATE_LIMIT_BUCKETS.setdefault(key, [])
-    events[:] = [event_time for event_time in events if now - event_time < timedelta(days=1)]
+    if len(RATE_LIMIT_BUCKETS) > 10000 and key not in RATE_LIMIT_BUCKETS:
+        stale_cutoff = now - timedelta(days=1)
+        for bucket_key, bucket_events in list(RATE_LIMIT_BUCKETS.items()):
+            if not any(t > stale_cutoff for t in bucket_events):
+                RATE_LIMIT_BUCKETS.pop(bucket_key, None)
+    events = _cleanup_rate_limit_bucket(RATE_LIMIT_BUCKETS.get(key, []), now)
+    RATE_LIMIT_BUCKETS[key] = events
     minute_events = [event_time for event_time in events if now - event_time < timedelta(minutes=1)]
     if len(minute_events) >= minute_limit:
         raise HTTPException(
@@ -1047,14 +1052,14 @@ def enforce_public_write_rate_limit(
     minute_limit = minute_limit or env_int("PUBLIC_WRITE_REQUESTS_PER_MINUTE", 20)
     day_limit = day_limit or env_int("PUBLIC_WRITE_REQUESTS_PER_DAY", 200)
     now = datetime.now(timezone.utc)
-    stale_cutoff = now - timedelta(days=1)
-    for bucket_key, bucket_events in list(RATE_LIMIT_BUCKETS.items()):
-        bucket_events[:] = [event_time for event_time in bucket_events if event_time > stale_cutoff]
-        if not bucket_events:
-            RATE_LIMIT_BUCKETS.pop(bucket_key, None)
     key = f"write:{action}:{rate_limit_client_key(request)}"
-    events = RATE_LIMIT_BUCKETS.setdefault(key, [])
-    events[:] = [event_time for event_time in events if now - event_time < timedelta(days=1)]
+    if len(RATE_LIMIT_BUCKETS) > 10000 and key not in RATE_LIMIT_BUCKETS:
+        stale_cutoff = now - timedelta(days=1)
+        for bucket_key, bucket_events in list(RATE_LIMIT_BUCKETS.items()):
+            if not any(t > stale_cutoff for t in bucket_events):
+                RATE_LIMIT_BUCKETS.pop(bucket_key, None)
+    events = _cleanup_rate_limit_bucket(RATE_LIMIT_BUCKETS.get(key, []), now)
+    RATE_LIMIT_BUCKETS[key] = events
     minute_events = [event_time for event_time in events if now - event_time < timedelta(minutes=1)]
     if len(minute_events) >= minute_limit:
         raise HTTPException(
