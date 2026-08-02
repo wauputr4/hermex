@@ -13,8 +13,8 @@
   <a class="brand" href="/" aria-label="Kembali ke beranda Hermex"><span aria-hidden="true">☆</span> hermex.fun</a>
   <section>
     <p class="code">{$page.status}</p>
-    <h1>{notFound ? 'Halaman ini belum terbaca.' : 'Hermex sedang terkendala.'}</h1>
-    <p>{notFound ? 'Cek kembali alamatnya atau mulai dari halaman utama.' : 'Muat ulang halaman. Kalau masih terjadi, kembali beberapa saat lagi.'}</p>
+    <h1>{notFound ? 'Halaman ini tidak ditemukan.' : 'Hermex sedang terkendala.'}</h1>
+    <p>{notFound ? 'Cek alamatnya atau mulai dari halaman utama.' : 'Muat ulang halaman. Kalau masih bermasalah, coba lagi nanti.'}</p>
     <div class="actions">
       <a href="/"><span aria-hidden="true">←</span> Ke halaman utama</a>
       {#if !notFound}<button type="button" on:click={() => location.reload()}><span aria-hidden="true">↻</span> Muat ulang</button>{/if}

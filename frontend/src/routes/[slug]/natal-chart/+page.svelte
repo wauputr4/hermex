@@ -64,7 +64,7 @@
     <header class="hero">
       <p>Detail natal chart</p>
       <h1>Kartu langit saat @{profile.username} lahir</h1>
-      <span>Posisi ini menjadi salah satu bahan analisis kepribadian Hermex.</span>
+      <span>Posisi ini dipakai sebagai salah satu bahan untuk membaca kepribadian di Hermex.</span>
     </header>
 
     <section class="character-card" aria-labelledby="character-title">

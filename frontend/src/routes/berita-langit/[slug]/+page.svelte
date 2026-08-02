@@ -80,7 +80,7 @@
 
       <footer class="methodology">
         <strong>Metodologi kurasi</strong>
-        <p>Hermex memilih peristiwa yang sudah terjadi, mengecek ulang faktanya, lalu memasangkannya dengan aspek astrologi yang dibahas setelah kejadian. Ini bacaan reflektif, bukan hubungan sebab-akibat.</p>
+        <p>Hermex memilih kejadian yang sudah berlangsung, mengecek faktanya, lalu membacanya bersama pola langit yang dibahas setelah kejadian. Ini bacaan reflektif, bukan sebab-akibat.</p>
       </footer>
 
       {#if posts.length > 1}

@@ -80,7 +80,7 @@
 
 <main>
   <nav><a href="/">☆ hermex.fun | analisis kepribadian</a>{#if user?.picture}<img src={user.picture} alt="" referrerpolicy="no-referrer" />{/if}</nav>
-  <header><p>PROFILMU</p><h1>Atur kartu karaktermu</h1><span>Ganti alamat profil atau tentukan siapa yang boleh melihat hasilmu.</span></header>
+  <header><p>PROFILMU</p><h1>Atur kartu karaktermu</h1><span>Ganti tautan profil atau tentukan siapa yang boleh melihat hasilmu.</span></header>
   {#if !user && !status}
     <section class="empty"><h2>Masuk dulu, ya</h2><p>Pengaturan ini hanya bisa dibuka oleh pemilik profil.</p><a href={`${API_BASE}/api/v1/auth/google/start`}>Masuk dengan Google</a></section>
   {:else if profiles.length}

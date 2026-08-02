@@ -200,7 +200,7 @@
     if (questions[index] || !profile?.profile_id || !profile?.claim_token) return;
     const result: any = await getBirthQuestion(profile.profile_id, profile.claim_token, index);
     const next = normalizeQuestion(result?.questionnaire?.current_question);
-    if (!next) throw new Error('Pertanyaan berikutnya belum dapat disiapkan. Coba lagi.');
+    if (!next) throw new Error('Pertanyaan berikutnya belum siap. Coba lagi.');
     questions = [...questions, next];
     persistPending();
   }
@@ -377,7 +377,7 @@
 
   function messageFrom(cause: unknown) {
     const message = cause instanceof Error ? cause.message : 'Terjadi kendala saat memproses data.';
-    return /failed to fetch/i.test(message) ? 'Tidak dapat terhubung ke layanan analisis. Coba lagi sebentar.' : message;
+    return /failed to fetch/i.test(message) ? 'Belum tersambung ke layanan analisis. Coba lagi sebentar.' : message;
   }
 
   function normalizeFullSections(value: any): Array<{ title: string; icon: string; body: string[] }> {
@@ -460,7 +460,7 @@
       <div class="hero-copy">
         <p class="eyebrow">Kenali pola dirimu</p>
         <h1>Analisa kepribadian dari tempat tanggal lahir</h1>
-        <p class="lead">Jawab beberapa pernyataan untuk membandingkan pola bawaan dengan cara kamu melihat dirimu.</p>
+        <p class="lead">Jawab beberapa pernyataan untuk membandingkan pola kelahiran dengan cara kamu melihat dirimu.</p>
       </div>
       <div class="home-action">
         {#if latestOwnedProfile}
@@ -470,7 +470,7 @@
           </article>
         {/if}
         <details class="analysis-entry" bind:this={analysisEntry} bind:open={analysisOpen}>
-          <summary>{latestOwnedProfile ? 'Buat analisis baru' : 'Form analisis'}</summary>
+          <summary>{latestOwnedProfile ? 'Buat analisis baru' : 'Mulai analisis'}</summary>
           <form class="birth-form" on:submit|preventDefault={beginAnalysis}>
         <fieldset class="birth-moment">
           <legend>Tanggal dan jam lahir</legend>
@@ -478,7 +478,7 @@
             <label><span>Tanggal lahir</span><input type="date" bind:value={birthDate} max={new Date().toISOString().slice(0, 10)} required /></label>
             <label><span>Jam lahir <small>opsional</small></span><input type="time" bind:value={birthTime} /></label>
           </div>
-          <p>Jika jam kosong, sistem memakai 00:00. Waktu yang lebih tepat membuat hasil lebih akurat.</p>
+          <p>Jam kosong dianggap 00.00. Jam yang tepat membantu hasilnya lebih akurat.</p>
         </fieldset>
         <label class="location">Lokasi lahir
           <input
@@ -566,7 +566,7 @@
         <div class="analysis-sections">
           {#each fullSections as section}<article><span aria-hidden="true">{section.icon}</span><div><h2>{section.title}</h2>{#each section.body as paragraph}<p>{paragraph}</p>{/each}</div></article>{/each}
         </div>
-      {:else}<p class="empty-detail">Analisis naratif belum tersedia, tetapi detail natal chart tetap dapat dibaca di bawah.</p>{/if}
+      {:else}<p class="empty-detail">Penjelasan lengkap belum tersedia, tetapi detail natal chart tetap bisa dibaca di bawah.</p>{/if}
 
       <details class="natal-details">
         <summary>Lihat detail natal chart</summary>

@@ -92,6 +92,14 @@ class PersonalityFlowTest(unittest.TestCase):
         self.assertTrue(main.questionnaire_is_safe(original))
         self.assertTrue(main.questionnaire_is_safe(personalized))
 
+    def test_questionnaire_pronouns_match_whole_words(self) -> None:
+        questionnaire = main.build_questionnaire(main.derive_personality_signals(main.compute_chart(self.birth)))
+        questionnaire["questions"][0]["prompt"] = "Aku menjaga orang yang aku sayang ketika keadaan sulit."
+        self.assertTrue(main.questionnaire_is_safe(questionnaire))
+
+        questionnaire["questions"][0]["prompt"] = "Saya menjaga orang yang saya sayang ketika keadaan sulit."
+        self.assertFalse(main.questionnaire_is_safe(questionnaire))
+
     def test_guest_preview_does_not_include_full_analysis(self) -> None:
         response = {
             "preview_summary": "Ringkas",
@@ -307,6 +315,29 @@ class PersonalityFlowTest(unittest.TestCase):
                 with main.db() as conn:
                     body = conn.execute("SELECT body FROM sky_posts WHERE slug = ?", (slug,)).fetchone()["body"]
             self.assertIn("Tetap simpan ini.", body)
+
+    def test_current_sky_archive_is_seeded_by_default(self) -> None:
+        expected = {
+            "agustus-2025-ai-uranus-dan-gelembung",
+            "september-2025-kimmel-dan-siklus-24-tahun",
+            "oktober-2025-pencurian-louvre",
+            "november-2025-cloudflare-dan-merkurius",
+            "januari-2026-minneapolis-mars-pluto",
+            "februari-2026-super-bowl-bad-bunny",
+            "maret-2026-sora-ditutup",
+            "april-2026-percobaan-serangan-dan-uranus",
+            "mei-2026-ledakan-pabrik-kembang-api",
+            "juni-2026-gempa-venezuela",
+            "juli-2026-lindsey-graham",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "sky.db"
+            with patch.object(main, "DB_PATH", db_path):
+                main.init_db()
+                with main.db() as conn:
+                    seeded = {row[0] for row in conn.execute("SELECT slug FROM sky_posts")}
+        self.assertTrue(expected.issubset(seeded))
+        self.assertEqual(set(post["slug"] for post in main.default_sky_posts()), expected)
 
     def test_profile_owner_is_enforced_outside_self_hosted_mode(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

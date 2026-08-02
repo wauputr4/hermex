@@ -5,6 +5,7 @@ import hmac
 import html
 import json
 import os
+import re
 import secrets
 import sqlite3
 import urllib.parse
@@ -403,6 +404,9 @@ def init_db() -> None:
         retired_slugs = (
             "setahun-di-langit-agustus-2025-juli-2026",
             "desember-2025-batas-bukti-review",
+            "bulan-sebagai-ritme-harian",
+            "merkurius-dan-cuaca-komunikasi",
+            "saturnus-dan-struktur-sosial",
         )
         conn.executemany("DELETE FROM sky_posts WHERE slug = ?", ((slug,) for slug in retired_slugs))
         for post in default_sky_posts():
@@ -1399,7 +1403,7 @@ def build_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
     )
     element_focus = {
         "fire": "berani mencoba pengalaman baru",
-        "earth": "membuat rencana jadi sesuatu yang nyata",
+        "earth": "membuat rencana jadi sesuatu yang bisa dijalankan",
         "air": "bertukar pikiran dan melihat sudut pandang baru",
         "water": "memahami perasaan dan suasana yang tak terucap",
     }
@@ -1519,7 +1523,7 @@ def questionnaire_is_safe(questionnaire: dict[str, Any]) -> bool:
     public_text = " ".join(prompts).lower()
     return (
         all(QUESTIONNAIRE_WORD_MIN <= len(prompt.split()) <= QUESTIONNAIRE_WORD_MAX for prompt in prompts)
-        and all("aku" in prompt.lower() and "saya" not in prompt.lower() for prompt in prompts)
+        and all(re.search(r"\baku\b", prompt.lower()) and not re.search(r"\bsaya\b", prompt.lower()) for prompt in prompts)
         and not any(term in public_text for term in QUESTIONNAIRE_FORBIDDEN_TERMS)
     )
 

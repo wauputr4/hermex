@@ -22,7 +22,7 @@
       await onNext(current + 1);
       current += 1;
     } catch (cause) {
-      loadError = cause instanceof Error ? cause.message : 'Pertanyaan berikutnya belum dapat dimuat.';
+      loadError = cause instanceof Error ? cause.message : 'Pertanyaan berikutnya belum siap.';
     } finally {
       loadingNext = false;
     }

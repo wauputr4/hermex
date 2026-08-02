@@ -206,7 +206,7 @@
   {#if error || !publicProfile}
     <section class="empty">
       <span class="empty-icon" aria-hidden="true">☆</span>
-      <h1>{error === 'Profil ini private.' ? 'Profil ini private' : 'Profil belum ketemu'}</h1>
+      <h1>{error === 'Profil ini private.' ? 'Profil ini bersifat pribadi' : 'Profil belum ketemu'}</h1>
       <p>{error === 'Profil ini private.' ? 'Pemilik kartu memilih untuk tidak menampilkan hasilnya ke publik.' : error || 'Cek lagi username yang kamu buka.'}</p>
       <a class="primary" href="/"><span aria-hidden="true">✦</span> Buat kartu karaktermu</a>
     </section>
@@ -266,7 +266,7 @@
 
     <a class="natal-link" href={`/${publicProfile.username}/natal-chart`}>
       <span class="natal-mark" aria-hidden="true">◎</span>
-      <span><small>Detail natal chart</small><strong>Lihat Kartu Karakter & Chart Explorer</strong><em>Posisi lengkap yang dipakai sebagai bahan analisis.</em></span>
+      <span><small>Detail natal chart</small><strong>Lihat Kartu Karakter & Chart Explorer</strong><em>Posisi lengkap yang dipakai untuk membaca polamu.</em></span>
       <span aria-hidden="true">→</span>
     </a>
 
@@ -285,7 +285,7 @@
             {/each}
           </div>
         </fieldset>
-        <label for="feedback-text">Feedback <span>opsional</span></label>
+        <label for="feedback-text">Catatan tambahan <span>opsional</span></label>
         <textarea id="feedback-text" bind:value={feedbackText} maxlength="1200" rows="4" placeholder="Bagian mana yang terasa paling pas atau kurang pas?"></textarea>
         <button class="feedback-submit" type="button" disabled={!feedbackRating || feedbackPending} on:click={saveFeedback}><span aria-hidden="true">✓</span> {feedbackPending ? 'Menyimpan…' : 'Kirim penilaian'}</button>
         <p class="feedback-status" aria-live="polite">{feedbackStatus}</p>
@@ -335,7 +335,7 @@
         <p>Empat cara baru untuk memahami pilihan, kebiasaan, dan hubunganmu sedang kami siapkan.</p>
       </div>
       <ul>
-        <li><span aria-hidden="true">⌁</span><strong>Minat & bakat</strong><small>Temukan bidang yang terasa paling natural buatmu.</small></li>
+        <li><span aria-hidden="true">⌁</span><strong>Minat & bakat</strong><small>Temukan bidang yang paling cocok buatmu.</small></li>
         <li><span aria-hidden="true">☼</span><strong>Refleksi harian</strong><small>Catat perasaan dan lihat pola kecil yang berulang.</small></li>
         <li><span aria-hidden="true">↗</span><strong>Roadmap masa depan</strong><small>Susun langkah yang lebih pas dengan caramu bertumbuh.</small></li>
         <li><span aria-hidden="true">♡</span><strong>Kecocokan pasangan</strong><small>Pahami cara kalian dekat, berbeda, dan saling mendukung.</small></li>

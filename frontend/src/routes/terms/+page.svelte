@@ -59,7 +59,7 @@
 
       <section>
         <span>07</span>
-        <div><h2>Permintaan penghapusan data</h2><p>Kamu dapat meminta penghapusan data akun dan hasil Hermex dengan menghubungi <a href="mailto:me@wau.my.id">me@wau.my.id</a> dari alamat email yang terhubung ke akunmu. Kami dapat meminta verifikasi agar data tidak dihapus oleh orang lain.</p></div>
+        <div><h2>Permintaan penghapusan data</h2><p>Kamu dapat meminta penghapusan data akun dan hasil Hermex dengan menghubungi <a href="mailto:me@wau.my.id">me@wau.my.id</a> dari alamat email yang terhubung ke akunmu. Hermex dapat meminta verifikasi agar data tidak dihapus oleh orang lain.</p></div>
       </section>
 
       <section>
