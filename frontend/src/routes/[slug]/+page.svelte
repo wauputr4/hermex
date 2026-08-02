@@ -293,15 +293,17 @@
     {/if}
     <a class="methodology-link" href="/metodologi"><span aria-hidden="true">◎</span><span><strong>Cara hasil ini disusun</strong><small>Lihat metodologi dan batas interpretasi Hermex.</small></span><span aria-hidden="true">→</span></a>
 
-    <section class="share-panel" aria-labelledby="share-title">
-      <span class="share-mark" aria-hidden="true">↗</span>
-      <div><h2 id="share-title">Minta temanmu ikut menilai</h2><p>Bagikan profil ini agar temanmu bisa memvalidasi karaktermu, lalu ajak mereka mencoba analisisnya sendiri.</p></div>
-      <div class="share-actions">
-        <button class="primary" type="button" on:click={shareProfile}><span aria-hidden="true">↗</span> Bagikan profil</button>
-        <button class="secondary" type="button" on:click={exportProfile}><span aria-hidden="true">↓</span> Unduh gambar</button>
-      </div>
-      <p class="share-status" aria-live="polite">{shareStatus || exportStatus}</p>
-    </section>
+    {#if publicProfile.viewer_is_owner}
+      <section class="share-panel" aria-labelledby="share-title">
+        <span class="share-mark" aria-hidden="true">↗</span>
+        <div><h2 id="share-title">Minta temanmu ikut menilai</h2><p>Bagikan profil ini agar temanmu bisa memvalidasi karaktermu, lalu ajak mereka mencoba analisisnya sendiri.</p></div>
+        <div class="share-actions">
+          <button class="primary" type="button" on:click={shareProfile}><span aria-hidden="true">↗</span> Bagikan profil</button>
+          <button class="secondary" type="button" on:click={exportProfile}><span aria-hidden="true">↓</span> Unduh gambar</button>
+        </div>
+        <p class="share-status" aria-live="polite">{shareStatus || exportStatus}</p>
+      </section>
+    {/if}
 
     {#if publicProfile.viewer_is_owner}
       <section class="visibility-card" aria-labelledby="visibility-title">
@@ -315,6 +317,7 @@
         </label>
         <button class="visibility-save" type="button" disabled={visibilityPending} on:click={saveVisibility}><span aria-hidden="true">✓</span> {visibilityPending ? 'Menyimpan…' : 'Simpan visibilitas'}</button>
         <p class="visibility-status" role="status">{visibilityStatus}</p>
+        <a class="community-link" href="/#community-title"><span aria-hidden="true">◎</span><span><strong>Kenalan dengan kartu orang lain</strong><small>Lihat profil publik lain dan coba analisismu sendiri.</small></span><span aria-hidden="true">→</span></a>
       </section>
     {/if}
 
@@ -413,6 +416,10 @@
   .visibility-save { display: inline-flex; width: fit-content; min-height: 46px; align-items: center; gap: 8px; border: 0; border-radius: 14px; padding: 0 18px; background: #5b55d6; color: #fff; font-weight: 850; cursor: pointer; }
   .visibility-save:disabled { cursor: wait; opacity: .55; }
   .visibility-status { min-height: 1.25em; margin: -8px 0 0; color: #67616e; font-size: .82rem; }
+  .community-link { display: grid; grid-template-columns: 42px 1fr auto; gap: 14px; align-items: center; border: 1px solid #ded9d1; border-radius: 18px; padding: 16px; color: #302a36; text-decoration: none; }
+  .community-link > span:first-child { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: #f2efff; color: #5b55d6; font-size: 1.2rem; }
+  .community-link strong, .community-link small { display: block; }
+  .community-link small { margin-top: 3px; color: #716a78; }
   footer { display: flex; justify-content: space-between; align-items: center; min-height: 110px; margin-top: 44px; border-top: 1px solid #e7e1d9; color: #827b82; font-size: .82rem; }
   footer div, footer div small { display: block; }
   footer div small { max-width: 360px; margin-top: 5px; line-height: 1.45; }

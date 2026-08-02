@@ -108,6 +108,11 @@ The guest analysis is linked to the signed-in account through the existing
 profile claim flow. Guests and other accounts cannot fetch the complete result.
 Self-hosted operators may explicitly set `SELF_HOSTED_FULL_ACCESS=true`.
 
+New profiles are public by default so a result can be shared immediately. The
+owner can turn visibility off from the profile page; private profiles remain
+available to their owner after Google login, while sharing and export controls
+stay hidden from other visitors.
+
 ## Tests and documentation
 
 ```bash

@@ -2699,8 +2699,8 @@ def create_public_profile(payload: PublicProfileInput, request: Request) -> dict
                 raise HTTPException(status_code=403, detail="Profile claim token or Google-linked ownership is required")
             conn.execute(
                 """
-                INSERT INTO public_profiles (username, profile_id, email, display_name, bio, avatar_url, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO public_profiles (username, profile_id, email, display_name, bio, avatar_url, created_at, updated_at, is_public)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
                 """,
                 (
                     username,

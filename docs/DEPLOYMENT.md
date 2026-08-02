@@ -150,6 +150,8 @@ Production expectations:
 - Admin session secret and Google session secret are long random values.
 - Admin password is not the local default.
 - `/admin/*` and `/api/v1/admin/*` are protected.
+- New public profiles default to visible. Owners can switch a profile to
+  private after login; verify both states during a release smoke test.
 
 ## 7. Reverse proxy example
 

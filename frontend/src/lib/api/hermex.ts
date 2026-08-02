@@ -1,4 +1,15 @@
 export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:5667';
+export const SKY_NEWS_FETCH_TIMEOUT_MS = 8000;
+
+export async function fetchWithTimeout(fetcher: typeof fetch, input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SKY_NEWS_FETCH_TIMEOUT_MS);
+  try {
+    return await fetcher(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export class ApiError extends Error {
   status: number;

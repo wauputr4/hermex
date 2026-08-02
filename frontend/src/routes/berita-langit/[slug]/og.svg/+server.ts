@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { API_BASE } from '$lib/api/hermex';
+import { API_BASE, fetchWithTimeout } from '$lib/api/hermex';
 import { articleMeta } from '$lib/articleMeta';
 
 const escapeXml = (value: string) => value.replace(/[<>&'\"]/g, (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[char] || char);
@@ -16,7 +16,7 @@ const wrap = (value: string, limit = 26) => {
 export const GET: RequestHandler = async ({ fetch, params }) => {
   let post: any = null;
   try {
-    const response = await fetch(`${API_BASE}/api/v1/sky-news`);
+    const response = await fetchWithTimeout(fetch, `${API_BASE}/api/v1/sky-news`);
     if (response.ok) post = ((await response.json()).posts || []).find((item: any) => item.slug === params.slug);
   } catch {
     // The fallback still produces a valid image if the API is unavailable.

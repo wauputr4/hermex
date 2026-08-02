@@ -504,6 +504,25 @@ class PersonalityFlowTest(unittest.TestCase):
                         self.assertEqual(public.status_code, 200)
                         self.assertFalse(public.json()["viewer_is_owner"])
 
+    def test_new_public_profile_defaults_to_public(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "public-default.db"
+            with patch.object(main, "DB_PATH", db_path):
+                main.init_db()
+                with main.db() as conn:
+                    conn.execute(
+                        "INSERT INTO profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        ("profile-public", "Owner", "1997-06-19", None, "Jakarta", None, None, "Asia/Jakarta", 1, "{}", "now"),
+                    )
+                    conn.execute("INSERT INTO user_profiles VALUES (?, ?, ?)", ("google-owner", "profile-public", "now"))
+                with TestClient(main.app) as client, patch.object(main, "read_google_session", return_value={"sub": "google-owner"}):
+                    created = client.post(
+                        "/api/v1/public-profiles",
+                        json={"profile_id": "profile-public", "username": "pemilikpublik", "email": "owner@example.com"},
+                    )
+                self.assertEqual(created.status_code, 200)
+                self.assertTrue(created.json()["public_profile"]["is_public"])
+
     def test_delete_history_removes_owned_profile_data(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             db_path = Path(directory) / "delete.db"
