@@ -3,11 +3,16 @@ export const SKY_NEWS_FETCH_TIMEOUT_MS = 8000;
 
 export async function fetchWithTimeout(fetcher: typeof fetch, input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
+  const callerSignal = init?.signal;
+  const forwardAbort = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) controller.abort(callerSignal.reason);
+  else callerSignal?.addEventListener('abort', forwardAbort, { once: true });
   const timeout = setTimeout(() => controller.abort(), SKY_NEWS_FETCH_TIMEOUT_MS);
   try {
     return await fetcher(input, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
+    callerSignal?.removeEventListener('abort', forwardAbort);
   }
 }
 

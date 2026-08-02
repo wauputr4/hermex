@@ -413,6 +413,17 @@ class PersonalityFlowTest(unittest.TestCase):
 
                 full_path = f"/api/v1/interpretations/{payload['interpretation_id']}/full"
                 self.assertEqual(client.get(full_path).status_code, 401)
+                with patch.object(main, "read_google_session", return_value={"sub": "google-owner"}):
+                    with main.db() as conn:
+                        conn.execute(
+                            "INSERT INTO user_profiles VALUES (?, ?, ?)",
+                            ("google-owner", analyzed["profile_id"], "now"),
+                        )
+                    owner_full = client.get(full_path)
+                    self.assertEqual(owner_full.status_code, 200)
+                    self.assertIn("full_analysis", owner_full.json()["interpretation"])
+                with patch.object(main, "read_google_session", return_value={"sub": "google-other"}):
+                    self.assertEqual(client.get(full_path).status_code, 403)
                 with patch.dict(os.environ, {"SELF_HOSTED_FULL_ACCESS": "true"}):
                     full = client.get(full_path)
                 self.assertEqual(full.status_code, 200)
