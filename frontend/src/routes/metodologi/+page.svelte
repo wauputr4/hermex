@@ -77,8 +77,6 @@
     <p>Posisi benda langit dapat dihitung secara astronomis. Namun, klaim bahwa natal chart dapat menjelaskan kepribadian secara akurat belum didukung bukti ilmiah yang kuat. Karena itu Hermex menempatkan hasilnya sebagai alat refleksi.</p>
     <ul>
       <li><a href="https://www.astro.com/swisseph-download/doc/swisseph.htm" target="_blank" rel="noreferrer">Dokumentasi Swiss Ephemeris</a><span>Cara posisi planet, Ascendant, dan rumah dihitung oleh mesin yang dipakai Hermex.</span></li>
-      <li><a href="https://ssd.jpl.nasa.gov/planets/orbits.html" target="_blank" rel="noreferrer">JPL NASA: Planetary Orbits &amp; Ephemerides</a><span>Latar astronomi tentang ephemeris atau tabel posisi benda langit.</span></li>
-      <li><a href="https://www.nature.com/articles/318419a0.pdf" target="_blank" rel="noreferrer">Nature: A double-blind test of astrology</a><span>Penelitian terkontrol mengenai klaim natal chart dan kepribadian.</span></li>
     </ul>
   </section>
 

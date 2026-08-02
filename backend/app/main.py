@@ -1386,7 +1386,7 @@ def derive_personality_signals(chart: dict[str, Any]) -> dict[str, Any]:
 
 QUESTIONNAIRE_COUNT = 10
 QUESTIONNAIRE_WORD_MIN = 8
-QUESTIONNAIRE_WORD_MAX = 22
+QUESTIONNAIRE_WORD_MAX = 20
 
 
 def build_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
@@ -1398,29 +1398,29 @@ def build_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
         for item in signals.get("major_aspects") or []
     )
     element_focus = {
-        "fire": "bergerak berani menuju pengalaman baru",
-        "earth": "membangun sesuatu yang nyata dan dapat diandalkan",
-        "air": "bertukar gagasan dan melihat banyak sudut pandang",
-        "water": "memahami perasaan serta suasana yang tidak terucap",
+        "fire": "berani mencoba pengalaman baru",
+        "earth": "membuat rencana jadi sesuatu yang nyata",
+        "air": "bertukar pikiran dan melihat sudut pandang baru",
+        "water": "memahami perasaan dan suasana yang tak terucap",
     }
     modality_focus = {
-        "cardinal": "mengambil langkah pertama saat arah belum jelas",
-        "fixed": "mempertahankan pilihan sampai prosesnya benar-benar selesai",
-        "mutable": "menyesuaikan cara ketika keadaan berubah dengan cepat",
+        "cardinal": "memulai dulu saat arahnya belum jelas",
+        "fixed": "bertahan sampai urusannya benar-benar selesai",
+        "mutable": "mengubah cara saat keadaan berubah",
     }
     house_focus = {
-        1: "cara membawa diri dan mengambil inisiatif",
-        2: "rasa aman, nilai pribadi, dan sumber daya",
-        3: "belajar, berbicara, dan memahami lingkungan dekat",
-        4: "keluarga, akar kehidupan, dan ruang pribadi",
-        5: "kreativitas, kesenangan, dan keberanian mengekspresikan diri",
-        6: "kebiasaan, pekerjaan harian, dan cara merawat diri",
-        7: "kemitraan, kompromi, dan hubungan dekat",
-        8: "kepercayaan, perubahan mendalam, dan hal yang dibagi",
-        9: "keyakinan, penjelajahan, dan pencarian makna",
-        10: "tanggung jawab, pencapaian, dan peran di masyarakat",
-        11: "persahabatan, komunitas, dan cita-cita bersama",
-        12: "refleksi, pemulihan, dan kebutuhan akan ruang sunyi",
+        1: "membawa diri dan memulai sesuatu",
+        2: "rasa aman, nilai diri, dan uang",
+        3: "belajar, berbicara, dan lingkungan dekat",
+        4: "keluarga dan ruang pribadi",
+        5: "kreativitas dan cara mengekspresikan diri",
+        6: "rutinitas, pekerjaan, dan merawat diri",
+        7: "hubungan dekat dan kerja sama",
+        8: "kepercayaan dan perubahan besar",
+        9: "keyakinan dan pencarian makna",
+        10: "tanggung jawab dan pencapaian",
+        11: "pertemanan dan tujuan bersama",
+        12: "merenung, pulih, dan menyendiri",
     }
 
     def position_element(key: str) -> str:
@@ -1441,24 +1441,24 @@ def build_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
     dominant_houses = visible_focus.get("dominant_houses") or []
     dominant_house = int(dominant_houses[0]["house"]) if dominant_houses else 1
     prompts = [
-        f"Saya paling menjadi diri sendiri saat {element_focus[position_element('sun')]} dalam {position_house('sun')}.",
-        f"Saya merasa aman saat {element_focus[position_element('moon')]} dalam {position_house('moon')}.",
-        f"Dalam situasi baru, saya cenderung {modality_focus[position_modality('ascendant')] }.",
-        f"Arah tindakan saya mengikuti dorongan untuk {modality_focus[str(ruler_position.get('modality') or modality)]} dalam {house_focus[int(ruler.get('house') or 1)]}.",
-        f"Saya memahami informasi dengan {element_focus[position_element('mercury')]}, terutama dalam {position_house('mercury')}.",
-        f"Saya membangun kedekatan dengan {element_focus[position_element('venus')]} dalam {position_house('venus')}.",
-        f"Saat mengejar tujuan, saya {modality_focus[position_modality('mars')]} dalam {position_house('mars')}.",
+        f"Aku paling menjadi diri sendiri saat {element_focus[position_element('sun')]} lewat {position_house('sun')}.",
+        f"Aku merasa aman saat {element_focus[position_element('moon')]} lewat {position_house('moon')}.",
+        f"Di situasi baru, aku cenderung {modality_focus[position_modality('ascendant')]}.",
+        f"Aku biasanya {modality_focus[str(ruler_position.get('modality') or modality)]} dalam {house_focus[int(ruler.get('house') or 1)]}.",
+        f"Aku lebih mudah paham saat {element_focus[position_element('mercury')]} lewat {position_house('mercury')}.",
+        f"Aku membangun kedekatan dengan {element_focus[position_element('venus')]} lewat {position_house('venus')}.",
+        f"Saat mengejar tujuan, aku {modality_focus[position_modality('mars')]} dalam {position_house('mars')}.",
         (
-            "Beberapa dorongan dalam diri saya sering beradu sebelum keputusan terasa mantap."
+            "Dorongan dalam diriku sering bertabrakan sebelum aku yakin memilih."
             if has_tension
-            else "Pikiran, perasaan, dan tindakan saya biasanya saling mendukung ketika mengambil keputusan."
+            else "Pikiran, perasaan, dan tindakanku biasanya sejalan saat aku memilih."
         ),
         (
-            f"Saya mudah terlihat menonjol saat terlibat dalam {house_focus[dominant_house]}."
+            f"Aku gampang terlihat saat sibuk dengan {house_focus[dominant_house]}."
             if visible_focus.get("angular_planets")
-            else f"Perhatian saya sering kembali pada {house_focus[dominant_house]}, meski kesibukan berubah."
+            else f"Perhatianku sering kembali ke {house_focus[dominant_house]}, walau kesibukanku berubah."
         ),
-        f"Secara umum, saya berkembang dengan {element_focus[element]} sambil {modality_focus[modality]}.",
+        f"Aku berkembang dengan {element_focus[element]} sambil {modality_focus[modality]}.",
     ]
     questions = [
         {"id": f"q_{index:02d}", "prompt": prompt}
@@ -1519,6 +1519,7 @@ def questionnaire_is_safe(questionnaire: dict[str, Any]) -> bool:
     public_text = " ".join(prompts).lower()
     return (
         all(QUESTIONNAIRE_WORD_MIN <= len(prompt.split()) <= QUESTIONNAIRE_WORD_MAX for prompt in prompts)
+        and all("aku" in prompt.lower() and "saya" not in prompt.lower() for prompt in prompts)
         and not any(term in public_text for term in QUESTIONNAIRE_FORBIDDEN_TERMS)
     )
 
@@ -1537,6 +1538,7 @@ async def generate_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
                 "content": (
                     "Buat tepat 10 pernyataan refleksi kepribadian berbahasa Indonesia untuk dinilai 1-5. "
                     f"Setiap pernyataan harus {QUESTIONNAIRE_WORD_MIN}-{QUESTIONNAIRE_WORD_MAX} kata dan harus spesifik pada internal_signals yang diberikan. "
+                    "Gunakan kata ganti 'aku', bahasa sehari-hari, satu gagasan per pernyataan, dan kalimat yang ringkas. "
                     "Bahas berurutan: identitas, kebutuhan emosi, cara hadir, arah tindakan, cara berpikir, "
                     "relasi dan nilai, ketegasan dan batas, ketegangan batin, fokus hidup, lalu temperamen umum. "
                     "Jangan sebut astrologi, zodiak, planet, rumah, aspek, chart, natal, horoskop, transit, atau kosmik. "
@@ -2299,7 +2301,7 @@ async def call_llm(
     }
 
 
-app = FastAPI(title="Hermex API", version="0.1.0-alpha")
+app = FastAPI(title="Hermex API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv(

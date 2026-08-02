@@ -60,6 +60,8 @@ class PersonalityFlowTest(unittest.TestCase):
             )
         )
         public_text = " ".join(item["prompt"].lower() for item in questionnaire["questions"])
+        self.assertNotIn("saya", public_text)
+        self.assertTrue(all("aku" in item["prompt"].lower() for item in questionnaire["questions"]))
         for forbidden in ("astrologi", "zodiak", "planet", "rumah", "aspek", "chart", "kosmik"):
             self.assertNotIn(forbidden, public_text)
 
@@ -216,7 +218,7 @@ class PersonalityFlowTest(unittest.TestCase):
 
     def test_questionnaire_generation_uses_configured_ai(self) -> None:
         prompts = [
-            f"Pernyataan reflektif pribadi nomor {index} menggambarkan kebiasaan saya sehari-hari."
+            f"Aku melihat kebiasaan pribadiku lewat pernyataan reflektif nomor {index}."
             for index in range(1, 11)
         ]
         content = json.dumps({"questions": prompts})

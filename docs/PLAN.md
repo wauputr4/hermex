@@ -33,16 +33,16 @@ Build a lightweight personality analysis flow with clear birth inputs and practi
   - feedback capture.
 - Add admin provider settings and prompt audit history.
 
-### Weeks 7–8: Public alpha
+### Weeks 7–8: Initial public release
 - Add mobile-first responsive polish.
 - Run a smoke usability test (minimum 5 participants).
 - Complete OSS documentation:
   - API contract,
   - deployment notes,
   - contribution guide.
-- Release **Open Source Alpha**.
+- Release the first open-source version.
 
-## Post-alpha scope
+## Post-release scope
 
 - Stronger timezone fallback and auto-correction for birth place variants.
 - Production deployment for `hermex.fun`.
@@ -68,7 +68,7 @@ Build a lightweight personality analysis flow with clear birth inputs and practi
 - **Location/time precision risk**
   - Always validate timezone and allow manual override.
 - **Flow complexity risk**
-  - Keep the analysis steps simple for alpha.
+  - Keep the analysis steps simple for the first release.
   - Add only changes that improve completion or clarity.
 
 ## Naming policy

@@ -1,4 +1,4 @@
-![Hermex Fun social preview](docs/assets/hermex-social-preview.png)
+![Hermex Fun — Analisis Kepribadian AI](docs/assets/hermex-social-preview.png)
 
 # Hermex Fun
 
@@ -9,6 +9,7 @@ medical, legal, financial, or life advice.
 
 Website: **https://hermex.fun**
 Repository: **https://github.com/wauputr4/hermex**
+Latest stable release: **v1.0.0**
 
 ## How it works
 

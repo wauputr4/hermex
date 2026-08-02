@@ -59,7 +59,7 @@ http://127.0.0.1:5666
 You can configure the AI provider in two ways:
 
 - Environment variables in `backend/.env`.
-- Admin dashboard form under **Hermes AI provider**.
+- Admin dashboard form under **Hermex AI provider**.
 
 The dashboard can save:
 

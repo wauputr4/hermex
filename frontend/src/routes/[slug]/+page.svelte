@@ -7,15 +7,15 @@
   export let data: any;
 
   const sectionMeta: Record<string, { label: string; icon: string }> = {
-    core_identity: { label: 'Identitas dan motivasi inti', icon: '☉' },
-    emotional_needs: { label: 'Kebutuhan emosional', icon: '☾' },
+    core_identity: { label: 'Apa yang paling menggerakkanmu', icon: '☉' },
+    emotional_needs: { label: 'Hal yang membuatmu merasa aman', icon: '☾' },
     social_approach: { label: 'Cara menghadapi situasi baru', icon: '↗' },
     thinking_and_communication: { label: 'Cara berpikir dan berkomunikasi', icon: '✎' },
-    relationships_and_values: { label: 'Relasi dan nilai pribadi', icon: '♡' },
-    drive_and_boundaries: { label: 'Dorongan dan batas pribadi', icon: '→' },
+    relationships_and_values: { label: 'Cara dekat dengan orang lain', icon: '♡' },
+    drive_and_boundaries: { label: 'Cara mengejar tujuan dan menjaga batas', icon: '→' },
     inner_tensions: { label: 'Tarik-menarik dalam diri', icon: '↔' },
     dominant_patterns: { label: 'Pola yang paling kuat', icon: '✶' },
-    growth_focus: { label: 'Arah bertumbuh', icon: '✦' }
+    growth_focus: { label: 'Hal yang bisa kamu latih', icon: '✦' }
   };
 
   let shareStatus = '';
@@ -33,13 +33,13 @@
   $: publicProfile = refreshedProfile ?? data.publicProfile;
   $: error = refreshError || data.error;
   $: interpretation = publicProfile?.latest_interpretation?.interpretation ?? {};
-  $: summary = textValue(interpretation.preview_summary ?? interpretation.summary);
+  $: summary = everydayCopy(interpretation.preview_summary ?? interpretation.summary);
   $: highlights = stringList(interpretation.highlights ?? interpretation.strengths);
   $: identityKeywords = keywordList(interpretation.identity_keywords, highlights);
   $: fullAnalysis = objectValue(interpretation.full_analysis ?? publicProfile?.full_analysis);
   $: analysisSections = Object.entries(fullAnalysis)
-    .filter(([, value]) => textValue(value))
-    .map(([key, value]) => ({ key, text: textValue(value), ...(sectionMeta[key] ?? { label: titleCase(key), icon: '✦' }) }));
+    .filter(([, value]) => everydayCopy(value))
+    .map(([key, value]) => ({ key, text: everydayCopy(value), ...(sectionMeta[key] ?? { label: titleCase(key), icon: '✦' }) }));
   $: planets = publicProfile?.profile?.chart_highlights?.planets ?? [];
   $: contourValues = Array.from({ length: 10 }, (_, index) => {
     const planet = planets[index % Math.max(planets.length, 1)];
@@ -81,6 +81,13 @@
     return '';
   }
 
+  function everydayCopy(value: unknown): string {
+    return textValue(value)
+      .replace(/\bAnda\b/g, 'Kamu')
+      .replace(/\banda\b/g, 'kamu')
+      .replace(/\bmerupakan\b/gi, 'adalah');
+  }
+
   function parseJson(value: unknown): unknown {
     if (typeof value !== 'string') return value;
     const trimmed = value.trim();
@@ -90,7 +97,7 @@
 
   function stringList(value: unknown): string[] {
     const parsed = parseJson(value);
-    return Array.isArray(parsed) ? parsed.map(textValue).filter(Boolean).slice(0, 5) : [];
+    return Array.isArray(parsed) ? parsed.map(everydayCopy).filter(Boolean).slice(0, 5) : [];
   }
 
   function keywordList(value: unknown, fallback: string[]): Array<{ word: string; icon: string }> {
@@ -98,9 +105,9 @@
     const candidates = Array.isArray(parsed) && parsed.length ? parsed : fallback;
     return candidates.slice(0, 3).map((item: any, index) => {
       const rawWord = typeof item === 'object' ? textValue(item.word ?? item.label) : textValue(item);
-      const word = (rawWord.trim().split(/\s+/)[0] || ['Jernih', 'Hangat', 'Teguh'][index]).replace(/[^\p{L}\p{N}-]/gu, '');
+      const word = (rawWord.trim().split(/\s+/)[0] || '').replace(/[^\p{L}\p{N}-]/gu, '');
       return { word, icon: typeof item === 'object' && item.icon ? String(item.icon) : iconFor(word, index) };
-    });
+    }).filter((item) => item.word);
   }
 
   function iconFor(word: string, index: number): string {
@@ -242,8 +249,8 @@
       {#if analysisSections.length}
         <section class="analysis" aria-labelledby="analysis-title">
           <div class="section-heading">
-            <p class="eyebrow"><span aria-hidden="true">✶</span> Analisis lengkap</p>
-            <h2 id="analysis-title">Kenali bagian dirimu satu per satu</h2>
+            <p class="eyebrow"><span aria-hidden="true">✶</span> Tentang dirimu</p>
+            <h2 id="analysis-title">Baca pola dirimu, bagian per bagian</h2>
           </div>
           <div class="analysis-list">
             {#each analysisSections as section}
@@ -320,6 +327,20 @@
         <a class="community-link" href="/#community-title"><span aria-hidden="true">◎</span><span><strong>Kenalan dengan kartu orang lain</strong><small>Lihat profil publik lain dan coba analisismu sendiri.</small></span><span aria-hidden="true">→</span></a>
       </section>
     {/if}
+
+    <section class="coming-soon" aria-labelledby="coming-soon-title">
+      <div class="coming-soon-heading">
+        <p class="eyebrow"><span aria-hidden="true">✦</span> Segera hadir</p>
+        <h2 id="coming-soon-title">Kenal dirimu lebih jauh</h2>
+        <p>Empat cara baru untuk memahami pilihan, kebiasaan, dan hubunganmu sedang kami siapkan.</p>
+      </div>
+      <ul>
+        <li><span aria-hidden="true">⌁</span><strong>Minat & bakat</strong><small>Temukan bidang yang terasa paling natural buatmu.</small></li>
+        <li><span aria-hidden="true">☼</span><strong>Refleksi harian</strong><small>Catat perasaan dan lihat pola kecil yang berulang.</small></li>
+        <li><span aria-hidden="true">↗</span><strong>Roadmap masa depan</strong><small>Susun langkah yang lebih pas dengan caramu bertumbuh.</small></li>
+        <li><span aria-hidden="true">♡</span><strong>Kecocokan pasangan</strong><small>Pahami cara kalian dekat, berbeda, dan saling mendukung.</small></li>
+      </ul>
+    </section>
 
     <footer>
       <div><span>© {new Date().getFullYear()} Hermex</span><small>Hasil bersifat reflektif, bukan diagnosis atau kepastian.</small></div>
@@ -420,6 +441,14 @@
   .community-link > span:first-child { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: #f2efff; color: #5b55d6; font-size: 1.2rem; }
   .community-link strong, .community-link small { display: block; }
   .community-link small { margin-top: 3px; color: #716a78; }
+  .coming-soon { display: grid; grid-template-columns: minmax(190px, .7fr) minmax(0, 1.3fr); gap: 34px; margin-top: 34px; border: 1px solid #ded9d1; border-radius: 26px; padding: clamp(24px, 5vw, 40px); background: #302a36; color: #fff; }
+  .coming-soon-heading > p:last-child { margin: 14px 0 0; color: #d9d4dd; line-height: 1.55; }
+  .coming-soon h2 { font-size: 1.65rem; }
+  .coming-soon ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .coming-soon li { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-content: start; gap: 2px 10px; border: 1px solid #564e5f; border-radius: 16px; padding: 15px; background: #393240; }
+  .coming-soon li > span { grid-row: 1 / 3; display: grid; width: 34px; height: 34px; place-items: center; border-radius: 11px; background: #fff0ca; color: #5a4730; }
+  .coming-soon li strong { font-size: .9rem; }
+  .coming-soon li small { color: #cfc9d3; line-height: 1.4; }
   footer { display: flex; justify-content: space-between; align-items: center; min-height: 110px; margin-top: 44px; border-top: 1px solid #e7e1d9; color: #827b82; font-size: .82rem; }
   footer div, footer div small { display: block; }
   footer div small { max-width: 360px; margin-top: 5px; line-height: 1.45; }
@@ -440,6 +469,7 @@
     .share-panel { grid-template-columns: auto 1fr; }
     .share-actions { grid-column: 1 / -1; flex-direction: column; }
     .share-actions button { width: 100%; }
+    .coming-soon { grid-template-columns: 1fr; }
     footer { align-items: flex-start; gap: 20px; padding: 24px 0; }
   }
   @media (max-width: 420px) {
@@ -453,6 +483,7 @@
     .share-status { right: 18px; }
     .rating { justify-content: space-between; }
     .rating button { width: min(48px, 17vw); }
+    .coming-soon ul { grid-template-columns: 1fr; }
   }
   @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>

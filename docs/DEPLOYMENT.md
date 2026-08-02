@@ -134,8 +134,8 @@ hermex:<feature>:v1
 hermex:<feature>:v2
 ```
 
-When adding a new storage version, keep the old reader for at least one beta
-release so existing browser sessions can migrate naturally.
+When adding a new storage version, keep the old reader through at least the
+next release so existing browser sessions can migrate naturally.
 
 ## 6. API and session safety
 
@@ -184,6 +184,9 @@ After deployment:
 5. Confirm guest history appears locally after a successful analysis.
 6. Confirm a network failure preserves form state and provides a retry path.
 7. Login to `/admin/dashboard` on the same origin and confirm prompt/provider/settings pages work.
+8. Verify Google callback and owner claim, public/private profile access, and
+   owner-only controls.
+9. Verify sharing/export controls and each OG image URL return `200`.
 
 ## 9. Self-hosted notes
 
