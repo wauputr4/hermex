@@ -152,7 +152,7 @@ class PersonalityFlowTest(unittest.TestCase):
             all(len(paragraph.split()) >= 50 for paragraph in normalized["full_analysis"].values())
         )
 
-    def test_identity_keywords_are_three_single_words_with_icons(self) -> None:
+    def test_identity_keywords_do_not_invent_missing_model_output(self) -> None:
         chart = main.compute_chart(self.birth)
         profile = {
             "profile_id": "profile-test",
@@ -168,9 +168,23 @@ class PersonalityFlowTest(unittest.TestCase):
             },
             profile,
         )
-        self.assertEqual(len(normalized["identity_keywords"]), 3)
+        self.assertEqual(len(normalized["identity_keywords"]), 2)
         self.assertTrue(all(len(item["word"].split()) == 1 for item in normalized["identity_keywords"]))
         self.assertTrue(all(item["icon"] for item in normalized["identity_keywords"]))
+
+    def test_truncated_json_recovers_complete_personality_fields(self) -> None:
+        truncated = """{
+          \"preview_summary\": \"Ringkasan yang dibuat model.\",
+          \"highlights\": [\"Adaptif\", \"Teliti\", \"Mandiri\"],
+          \"identity_keywords\": [{\"word\": \"Adaptif\", \"icon\": \"↗\"}],
+          \"full_analysis\": {\"core_identity\": \"Bagian lengkap.\", \"emotional_needs\": \"terpotong
+        """
+
+        recovered = main.parse_llm_content(truncated)
+
+        self.assertEqual(recovered["highlights"], ["Adaptif", "Teliti", "Mandiri"])
+        self.assertEqual(recovered["identity_keywords"][0]["word"], "Adaptif")
+        self.assertEqual(recovered["full_analysis"], {"core_identity": "Bagian lengkap."})
 
     def test_local_full_analysis_has_at_least_fifty_words_per_section(self) -> None:
         chart = main.compute_chart(self.birth)
@@ -205,13 +219,14 @@ class PersonalityFlowTest(unittest.TestCase):
             f"Pernyataan reflektif pribadi nomor {index} menggambarkan kebiasaan saya sehari-hari."
             for index in range(1, 11)
         ]
+        content = json.dumps({"questions": prompts})
 
         class FakeResponse:
             def raise_for_status(self) -> None:
                 return None
 
             def json(self) -> dict:
-                return {"choices": [{"message": {"content": '{"questions": ' + __import__("json").dumps(prompts) + "}"}}]}
+                return {"choices": [{"message": {"content": content}}]}
 
         class FakeClient:
             def __init__(self, **_kwargs) -> None:
@@ -238,6 +253,58 @@ class PersonalityFlowTest(unittest.TestCase):
         with patch.object(main, "get_llm_config", return_value=config), patch.object(main.httpx, "AsyncClient", FakeClient):
             questionnaire = asyncio.run(main.generate_questionnaire(signals))
         self.assertEqual([item["prompt"] for item in questionnaire["questions"]], prompts)
+
+    def test_configured_llm_failure_never_returns_a_template(self) -> None:
+        chart = main.compute_chart(self.birth)
+        profile = {
+            "profile_id": "profile-test",
+            "birth_date": "1997-06-19",
+            "chart": chart,
+            "traits": main.build_trait_profile(chart, time_unknown=True),
+            "questionnaire": {},
+            "validation": {},
+        }
+
+        class FailingClient:
+            def __init__(self, **_kwargs) -> None:
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args) -> None:
+                return None
+
+            async def post(self, *_args, **_kwargs):
+                raise main.httpx.ConnectError("offline")
+
+        config = {
+            "provider": "openai_compat", "base_url": "https://llm.example/v1", "api_key": "secret",
+            "model": "test-model", "temperature": 0.2, "max_tokens": 8000,
+        }
+        with patch.object(main, "get_llm_config", return_value=config), patch.object(main.httpx, "AsyncClient", FailingClient):
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(main.call_llm(profile))
+        self.assertEqual(error.exception.status_code, 503)
+
+    def test_hosted_admin_rejects_documented_defaults(self) -> None:
+        with patch.dict(os.environ, {"ADMIN_USERNAME": "admin", "ADMIN_PASSWORD": "hermes-admin", "ADMIN_SESSION_SECRET": "hermex-local-admin-session"}):
+            with patch.object(main, "is_local_public_app_url", return_value=False):
+                with self.assertRaises(RuntimeError):
+                    main.validate_hosted_admin_configuration()
+
+    def test_seeded_article_is_not_overwritten_after_an_admin_edit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "articles.db"
+            with patch.object(main, "DB_PATH", db_path):
+                main.init_db()
+                with main.db() as conn:
+                    slug = main.default_sky_posts()[0]["slug"]
+                    conn.execute("UPDATE sky_posts SET body = ? WHERE slug = ?", ("Catatan admin\n\n## Sumber\nTetap simpan ini.", slug))
+                main.init_db()
+                with main.db() as conn:
+                    body = conn.execute("SELECT body FROM sky_posts WHERE slug = ?", (slug,)).fetchone()["body"]
+            self.assertIn("Tetap simpan ini.", body)
 
     def test_profile_owner_is_enforced_outside_self_hosted_mode(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -436,6 +503,32 @@ class PersonalityFlowTest(unittest.TestCase):
                         public = client.get("/api/v1/public-profiles/ownerbaru")
                         self.assertEqual(public.status_code, 200)
                         self.assertFalse(public.json()["viewer_is_owner"])
+
+    def test_delete_history_removes_owned_profile_data(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "delete.db"
+            with patch.object(main, "DB_PATH", db_path):
+                main.init_db()
+                with main.db() as conn:
+                    conn.execute(
+                        "INSERT INTO profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        ("profile-delete", "Owner", "1997-06-19", None, "Jakarta", None, None, "Asia/Jakarta", 1, "{}", "now"),
+                    )
+                    conn.execute("INSERT INTO user_profiles VALUES (?, ?, ?)", ("google-owner", "profile-delete", "now"))
+                    conn.execute(
+                        "INSERT INTO public_profiles (username, profile_id, email, created_at, updated_at, is_public) VALUES (?, ?, ?, ?, ?, ?)",
+                        ("hapusdata", "profile-delete", "owner@example.com", "now", "now", 1),
+                    )
+                    conn.execute(
+                        "INSERT INTO interpretations VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        ("interpretation-delete", "profile-delete", "local_fallback", "local", "hash", "{}", "{}", "now"),
+                    )
+                with TestClient(main.app) as client, patch.object(main, "read_google_session", return_value={"sub": "google-owner"}):
+                    self.assertEqual(client.delete("/api/v1/user/history/profile-delete").status_code, 200)
+                with main.db() as conn:
+                    self.assertFalse(conn.execute("SELECT 1 FROM profiles WHERE id = 'profile-delete'").fetchone())
+                    self.assertFalse(conn.execute("SELECT 1 FROM public_profiles WHERE profile_id = 'profile-delete'").fetchone())
+                    self.assertFalse(conn.execute("SELECT 1 FROM interpretations WHERE profile_id = 'profile-delete'").fetchone())
 
 
 if __name__ == "__main__":

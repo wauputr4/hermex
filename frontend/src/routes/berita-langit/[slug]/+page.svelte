@@ -19,10 +19,10 @@
 
 <svelte:head>
   <title>{post?.title || 'Berita Langit'} · Hermex</title>
-  {#if post?.summary}
-    <meta name="description" content={post.summary} />
+  {#if post}
+    <meta name="description" content={post.summary || post.title} />
     <meta property="og:title" content={`${post.title} · Hermex`} />
-    <meta property="og:description" content={post.summary} />
+    <meta property="og:description" content={post.summary || post.title} />
     <meta property="og:type" content="article" />
     <meta property="og:image" content={ogUrl} />
     <meta name="twitter:card" content="summary_large_image" />

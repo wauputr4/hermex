@@ -21,7 +21,7 @@ LLM_BASE_URL=https://api.openai.com/v1
 LLM_API_KEY=your_api_key
 LLM_MODEL=gpt-4o-mini
 LLM_TEMPERATURE=0.4
-LLM_MAX_TOKENS=700
+LLM_MAX_TOKENS=8000
 ```
 
 ## Admin dashboard provider menu
@@ -103,7 +103,8 @@ The user message includes:
 - aspects,
 - derived traits,
 - personality signals,
-- validated questionnaire answers.
+- validated questionnaire answers. Answers are sent only for the requested
+  interpretation; they are not exposed in public profiles.
 
 ## Required interpretation response JSON
 

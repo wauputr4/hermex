@@ -56,11 +56,21 @@
         <span>06</span>
         <div><h2>Open source dan self-hosting</h2><p>Versi self-hosted dikelola oleh operator masing-masing. Penyimpanan data, penyedia AI, dan kebijakan operasionalnya menjadi tanggung jawab operator tersebut.</p></div>
       </section>
+
+      <section>
+        <span>07</span>
+        <div><h2>Permintaan penghapusan data</h2><p>Kamu dapat meminta penghapusan data akun dan hasil Hermex dengan menghubungi <a href="mailto:me@wau.my.id">me@wau.my.id</a> dari alamat email yang terhubung ke akunmu. Kami dapat meminta verifikasi agar data tidak dihapus oleh orang lain.</p></div>
+      </section>
+
+      <section>
+        <span>08</span>
+        <div><h2>Partisipasi penelitian</h2><p>Hermex belum memakai data akunmu sebagai data penelitian. Jika penelitian untuk menguji akurasi klaim astrologi dibuka, keikutsertaan hanya berlaku setelah kamu memberikan persetujuan terpisah. Menggunakan Hermex tidak otomatis membuatmu menjadi peserta, dan persetujuan dapat ditarik.</p></div>
+      </section>
     </div>
 
     <aside>
       <h2>Ada pertanyaan?</h2>
-      <p>Hubungi pengelola melalui <a href="https://github.com/wauputr4/hermex">repositori Hermex di GitHub</a>.</p>
+      <p>Hubungi <a href="mailto:me@wau.my.id">me@wau.my.id</a> atau buka <a href="https://github.com/wauputr4/hermex">repositori Hermex di GitHub</a>.</p>
     </aside>
   </article>
 </main>
@@ -83,6 +93,7 @@
   section > span { color: #5b55d6; font-size: .78rem; font-weight: 800; letter-spacing: .06em; }
   h2 { margin: 0 0 8px; font-size: clamp(1.15rem, 2vw, 1.4rem); letter-spacing: -.02em; }
   section p, aside p { max-width: 720px; margin: 0; color: #615968; line-height: 1.7; }
+  section a { color: #4e48c8; font-weight: 750; }
   aside { margin-top: 48px; border-radius: 18px; padding: 28px; background: #f2f0ff; }
   aside a { color: #4e48c8; font-weight: 750; }
   a:focus-visible { border-radius: 6px; outline: 3px solid rgba(91,85,214,.28); outline-offset: 4px; }

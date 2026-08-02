@@ -111,7 +111,7 @@ Self-hosted operators may explicitly set `SELF_HOSTED_FULL_ACCESS=true`.
 ## Tests and documentation
 
 ```bash
-(cd backend && .venv/bin/python -m unittest discover -s tests -v)
+(cd backend && python3.11 -m unittest discover -s tests -v)
 cd frontend && npm run build
 ```
 

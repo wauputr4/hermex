@@ -28,8 +28,10 @@
   let visibilityPending = false;
   let visibilityStatus = '';
   let exportSurface: HTMLElement;
-  $: publicProfile = data.publicProfile;
-  $: error = data.error;
+  let refreshedProfile: any = null;
+  let refreshError = '';
+  $: publicProfile = refreshedProfile ?? data.publicProfile;
+  $: error = refreshError || data.error;
   $: interpretation = publicProfile?.latest_interpretation?.interpretation ?? {};
   $: summary = textValue(interpretation.preview_summary ?? interpretation.summary);
   $: highlights = stringList(interpretation.highlights ?? interpretation.strengths);
@@ -50,8 +52,8 @@
   onMount(async () => {
     if (!data.username) return;
     try {
-      publicProfile = await getPublicProfile(data.username);
-      error = '';
+      refreshedProfile = await getPublicProfile(data.username);
+      refreshError = '';
     } catch {
       // The server-rendered public payload remains usable when auth refresh fails.
     }
@@ -173,7 +175,7 @@
     visibilityStatus = '';
     try {
       await updateProfileSettings(publicProfile.profile_id, { username: publicProfile.username, is_public: isPublic });
-      publicProfile = { ...publicProfile, is_public: isPublic };
+      refreshedProfile = { ...publicProfile, is_public: isPublic };
       visibilityStatus = isPublic ? 'Profilmu sekarang tampil ke publik.' : 'Profilmu sekarang hanya bisa kamu lihat.';
     } catch {
       visibilityStatus = 'Visibilitas belum tersimpan. Coba lagi.';
@@ -315,6 +317,11 @@
         <p class="visibility-status" role="status">{visibilityStatus}</p>
       </section>
     {/if}
+
+    <footer>
+      <div><span>© {new Date().getFullYear()} Hermex</span><small>Hasil bersifat reflektif, bukan diagnosis atau kepastian.</small></div>
+      <nav aria-label="Tautan footer"><a href="/metodologi">Metodologi</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a class="github" href="https://github.com/wauputr4/hermex" aria-label="GitHub Hermex" target="_blank" rel="noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.58 9.58 0 0 1 12 6.82c.85 0 1.7.11 2.5.34 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.85v2.77c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" /></svg></a></nav>
+    </footer>
   {/if}
 </main>
 
@@ -406,6 +413,13 @@
   .visibility-save { display: inline-flex; width: fit-content; min-height: 46px; align-items: center; gap: 8px; border: 0; border-radius: 14px; padding: 0 18px; background: #5b55d6; color: #fff; font-weight: 850; cursor: pointer; }
   .visibility-save:disabled { cursor: wait; opacity: .55; }
   .visibility-status { min-height: 1.25em; margin: -8px 0 0; color: #67616e; font-size: .82rem; }
+  footer { display: flex; justify-content: space-between; align-items: center; min-height: 110px; margin-top: 44px; border-top: 1px solid #e7e1d9; color: #827b82; font-size: .82rem; }
+  footer div, footer div small { display: block; }
+  footer div small { max-width: 360px; margin-top: 5px; line-height: 1.45; }
+  footer nav { gap: 18px; padding: 0; }
+  footer a { color: #615968; text-decoration: none; }
+  footer .github { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid #e7e1d9; border-radius: 50%; }
+  footer svg { width: 17px; fill: currentColor; }
   .empty { display: grid; justify-items: center; gap: 12px; padding: 20vh 20px 0; text-align: center; }
   .empty-icon { font-size: 3rem; color: #5b55d6; }
   .empty p { margin: 0 0 12px; color: #716a78; }
@@ -419,6 +433,7 @@
     .share-panel { grid-template-columns: auto 1fr; }
     .share-actions { grid-column: 1 / -1; flex-direction: column; }
     .share-actions button { width: 100%; }
+    footer { align-items: flex-start; gap: 20px; padding: 24px 0; }
   }
   @media (max-width: 420px) {
     .profile-shell { padding-inline: 12px; }

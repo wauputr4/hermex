@@ -2,6 +2,7 @@
   export let profile: unknown = {};
 
   let copied: 'data' | 'prompt' | '' = '';
+  let copyError = '';
 
   $: chart = (profile as any)?.chart_highlights ?? (profile as any)?.chart ?? {};
   $: planets = normalizePlanets(chart.planets);
@@ -73,9 +74,15 @@
   }
 
   async function copyText(value: string, type: 'data' | 'prompt') {
-    await navigator.clipboard.writeText(value);
-    copied = type;
-    window.setTimeout(() => (copied = ''), 1800);
+    copyError = '';
+    try {
+      if (!navigator.clipboard) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(value);
+      copied = type;
+      window.setTimeout(() => (copied = ''), 1800);
+    } catch {
+      copyError = 'Belum bisa menyalin. Pilih teksnya lalu salin manual.';
+    }
   }
 </script>
 
@@ -109,6 +116,7 @@
     <button class="copy-prompt" type="button" on:click={() => copyText(aiPrompt, 'prompt')}>{copied === 'prompt' ? 'Prompt tersalin' : 'Salin prompt'}</button>
   </div>
   <small>Hanya bagikan data yang nyaman kamu bagikan. ChatGPT adalah layanan terpisah dari Hermex.</small>
+  <p class="copy-error" aria-live="polite">{copyError}</p>
 </section>
 
 <style>
@@ -128,6 +136,7 @@
   small { display: block; margin-top: 14px; color: #7d7581; font-size: .76rem; line-height: 1.5; }
   .prompt-block { margin-top: 24px; padding-top: 22px; border-top: 1px solid #e7e1d9; }
   .prompt-block h3 { margin: 0 0 10px; font-size: 1rem; }
+  .copy-error { min-height: 1.25em; margin: 8px 0 0; color: #a33c52; font-size: .78rem; font-weight: 700; }
   .copy-prompt { min-height: 42px; margin-top: 10px; border: 1px solid #5b55d6; border-radius: 12px; padding: 0 15px; background: #fff; color: #5b55d6; font: inherit; font-size: .86rem; font-weight: 760; cursor: pointer; }
   @media (max-width: 520px) { .actions > * { flex: 1 1 100%; } }
 </style>

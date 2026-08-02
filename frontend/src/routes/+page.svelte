@@ -60,6 +60,7 @@
   let fullResult: any = null;
   let authUser: AuthUser | null = null;
   let error = '';
+  let retryScreen: Screen = 'home';
   let skyPosts: any[] = [];
   let communityProfiles: any[] = [];
   let ownedProfiles: any[] = [];
@@ -178,7 +179,7 @@
       persistPending();
       showScreen('questions');
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(messageFrom(cause), 'home');
     } finally {
       stopLoadingMessages();
     }
@@ -218,7 +219,7 @@
       if (authUser) await unlockFullResult();
       else showScreen('preview');
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(messageFrom(cause), 'questions');
     } finally {
       stopLoadingMessages();
     }
@@ -309,7 +310,7 @@
       }
       showScreen('character');
     } catch (cause) {
-      setError(messageFrom(cause));
+      setError(messageFrom(cause), 'preview');
     }
   }
 
@@ -364,13 +365,14 @@
     resetAnalysis();
     analysisOpen = true;
     requestAnimationFrame(() => {
-      analysisEntry.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      analysisEntry?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   }
 
-  function setError(message: string) {
+  function setError(message: string, retry: Screen = profile ? 'questions' : 'home') {
     error = message;
-    showScreen(profile ? 'error' : 'home');
+    retryScreen = retry;
+    showScreen(retry === 'home' ? 'home' : 'error');
   }
 
   function messageFrom(cause: unknown) {
@@ -468,7 +470,7 @@
           </article>
         {/if}
         <details class="analysis-entry" bind:this={analysisEntry} bind:open={analysisOpen}>
-          <summary class:visually-hidden={!latestOwnedProfile}>{latestOwnedProfile ? 'Buat analisis baru' : 'Form analisis'}</summary>
+          <summary>{latestOwnedProfile ? 'Buat analisis baru' : 'Form analisis'}</summary>
           <form class="birth-form" on:submit|preventDefault={beginAnalysis}>
         <fieldset class="birth-moment">
           <legend>Tanggal dan jam lahir</legend>
@@ -597,7 +599,7 @@
       <a class="methodology-link" href="/metodologi"><span aria-hidden="true">◎</span><span><strong>Lihat cara Hermex menyusun hasil</strong><small>Dari data lahir, pertanyaan, sampai batas interpretasinya.</small></span><span aria-hidden="true">→</span></a>
     </section>
   {:else if screen === 'error'}
-    <section class="error-state"><span>!</span><h1>Analisis belum selesai</h1><p role="alert">{error}</p><button class="primary" type="button" on:click={() => showScreen(profile ? 'questions' : 'home')}><span aria-hidden="true">↻</span> Coba lagi</button></section>
+    <section class="error-state"><span>!</span><h1>Analisis belum selesai</h1><p role="alert">{error}</p><button class="primary" type="button" on:click={() => showScreen(retryScreen)}><span aria-hidden="true">↻</span> Coba lagi</button></section>
   {/if}
 
   {#if screen !== 'questions' && screen !== 'natal-loading' && screen !== 'ai-loading'}
@@ -654,7 +656,7 @@
   .home-action, .analysis-entry { min-width: 0; }
   .analysis-entry { border: 0; }
   .analysis-entry > summary { margin-bottom: 12px; color: #5b55d6; font-weight: 760; cursor: pointer; }
-  .analysis-entry:not(.collapsed) > summary { display: none; }
+  .analysis-entry[open] > summary { display: none; }
   .returning-card { margin-bottom: 14px; border: 1px solid #e7e1d9; border-radius: 22px; padding: 24px; background: #302a36; color: #fff; }
   .returning-card h2 { margin: 0 0 8px; }
   .returning-card p { color: #e8e3eb; line-height: 1.5; }
@@ -673,7 +675,6 @@
   .sky-card h3 { margin: 0; font-size: 1.2rem; letter-spacing: -.02em; }
   .sky-card p:not(.eyebrow) { color: #615968; line-height: 1.5; }
   .all-news { display: inline-block; margin-top: 20px; color: #5b55d6; font-weight: 760; text-decoration: none; }
-  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .loading-state, .error-state { display: grid; justify-items: center; align-content: center; min-height: 72vh; text-align: center; }
   .loading-contour { width: min(260px, 68vw); margin-bottom: 28px; animation: breathe 2.2s ease-in-out infinite; }
   .loading-state h1, .error-state h1 { max-width: 760px; font-size: clamp(2.2rem, 5vw, 4.8rem); }

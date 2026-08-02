@@ -91,6 +91,9 @@ export async function apiDelete<T>(path: string): Promise<T> {
 }
 
 export async function apiPatch<T>(path: string, payload: unknown): Promise<T> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('Hermex is offline. Saved guest history and education are still available.');
+  }
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -205,7 +208,7 @@ export async function getUserHistory() {
 }
 
 export async function getProfileSettings(profile_id: string) {
-  return apiGet<{ profile_id: string; username: string; is_public: boolean }>(`/api/v1/user/profile-settings/${encodeURIComponent(profile_id)}`);
+  return apiGet<{ profile_id: string; username: string | null; is_public: boolean; public_url: string | null }>(`/api/v1/user/profile-settings/${encodeURIComponent(profile_id)}`);
 }
 
 export async function updateProfileSettings(profile_id: string, payload: { username: string; is_public: boolean }) {

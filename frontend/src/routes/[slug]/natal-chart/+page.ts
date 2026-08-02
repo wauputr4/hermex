@@ -3,8 +3,8 @@ import { API_BASE } from '$lib/api/hermex';
 import { redirect } from '@sveltejs/kit';
 
 export const load: PageLoad = async ({ fetch, params }) => {
-  if (params.slug.startsWith('@')) redirect(308, `/${params.slug.slice(1)}/natal-chart`);
   const username = decodeURIComponent(params.slug);
+  if (username.startsWith('@')) redirect(308, `/${encodeURIComponent(username.slice(1))}/natal-chart`);
   const response = await fetch(`${API_BASE}/api/v1/public-profiles/${encodeURIComponent(username)}`, { credentials: 'include' });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));

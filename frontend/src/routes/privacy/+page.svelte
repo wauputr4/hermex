@@ -1,151 +1,68 @@
 <svelte:head>
-  <title>Privacy Policy | Hermex</title>
-  <meta
-    name="description"
-    content="Privacy Policy for Hermex Fun, including guest storage, Google OAuth, AI provider data, and self-hosting boundaries."
-  />
+  <title>Kebijakan Privasi | Hermex</title>
+  <meta name="description" content="Cara Hermex menyimpan, memakai, dan menghapus data kelahiran, akun, serta hasil analisa." />
 </svelte:head>
 
-<main class="legal-shell">
+<main>
+  <header>
+    <a class="brand" href="/" aria-label="Kembali ke Hermex">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 5l5 12 13 2-10 8 3 13-11-7-11 7 3-13-10-8 13-2 5-12z" /></svg>
+      <span>Hermex</span>
+    </a>
+    <a class="back" href="/"><span aria-hidden="true">←</span> Kembali ke beranda</a>
+  </header>
+
   <article>
-    <a class="back" href="/">← Back to Hermex</a>
-    <p class="eyebrow">Hermex legal</p>
-    <h1>Privacy Policy</h1>
-    <p class="lead">
-      Hermex is guest-first and open-source. This policy explains what data may be used
-      by the app, what stays local, and how hosted login features are expected to work.
-    </p>
+    <div class="intro">
+      <p class="eyebrow">Kebijakan privasi</p>
+      <h1>Datamu dipakai untuk membuat hasilmu.</h1>
+      <p class="lead">Halaman ini menjelaskan data apa yang diproses Hermex, ke mana data dikirim, dan pilihan yang kamu punya atas data tersebut.</p>
+      <p class="updated">Diperbarui 1 Agustus 2026</p>
+    </div>
 
-    <section>
-      <h2>1. Local guest storage</h2>
-      <p>
-        Hermex may save draft birth data, selected city, and recent analysis state in your
-        browser storage. This helps you continue an unfinished analysis.
-      </p>
-    </section>
+    <div class="policy">
+      <section><span>01</span><div><h2>Data yang kamu berikan</h2><p>Hermex memproses tanggal, jam, dan lokasi lahir, jawaban kuesioner, username, serta feedback yang kamu kirim. Jika kamu login, nama, email, dan foto profil dasar dari Google juga dapat disimpan untuk menghubungkan hasil ke akunmu.</p></div></section>
+      <section><span>02</span><div><h2>Penyimpanan tamu</h2><p>Browser dapat menyimpan draf data kelahiran, lokasi yang dipilih, jawaban kuesioner, dan progres analisa agar kamu dapat melanjutkan alur yang belum selesai. Kamu dapat menghapusnya melalui data situs pada browser.</p></div></section>
+      <section><span>03</span><div><h2>Perhitungan dan AI</h2><p>Backend menyimpan profil perhitungan, jawaban, permintaan ke model, dan hasil analisa. Konteks yang diperlukan dapat dikirim ke penyedia AI yang dikonfigurasi pengelola. Kata sandi Google tidak pernah diterima Hermex.</p></div></section>
+      <section><span>04</span><div><h2>Profil publik</h2><p>Username dan kartu karakter dapat dibagikan melalui halaman publik jika opsi publik dinyalakan. Pemilik akun dapat mematikannya dari pengaturan profil; data khusus pemilik seperti ekspor mentah dan feedback tidak ditampilkan kepada pengunjung lain.</p></div></section>
+      <section><span>05</span><div><h2>Analitik</h2><p>Deployment dapat memakai Google Analytics jika measurement ID dikonfigurasi. Analitik ini membantu memahami penggunaan halaman. Instalasi lokal dan self-hosted dapat membiarkannya nonaktif.</p></div></section>
+      <section><span>06</span><div><h2>Penelitian bersifat opt-in</h2><p>Hermex belum memakai data akunmu sebagai data penelitian. Jika penelitian untuk mengevaluasi atau menguji klaim astrologi dibuka, data hanya dapat dipakai setelah kamu memberikan persetujuan terpisah. Menggunakan Hermex bukan persetujuan penelitian, dan persetujuan dapat ditarik.</p></div></section>
+      <section><span>07</span><div><h2>Akses dan penghapusan</h2><p>Kamu dapat meminta akses atau penghapusan data akun dan hasil dengan menghubungi <a href="mailto:me@wau.my.id">me@wau.my.id</a> dari email yang terhubung ke akun. Verifikasi dapat diminta untuk melindungi data dari permintaan pihak lain.</p></div></section>
+      <section><span>08</span><div><h2>Self-hosting</h2><p>Operator instalasi self-hosted mengendalikan penyimpanan, penyedia AI, kunci, dan kebijakan operasionalnya sendiri. Kebijakan ini berlaku untuk layanan Hermex yang dikelola di hermex.fun.</p></div></section>
+    </div>
 
-    <section>
-      <h2>2. Backend records</h2>
-      <p>
-        When you generate a chart or AI interpretation, the backend may store profile
-        records, chart payloads, prompt payloads, AI responses, and feedback in SQLite so
-        the admin dashboard can audit local usage.
-      </p>
-    </section>
-
-    <section>
-      <h2>3. Google OAuth</h2>
-      <p>
-        When enabled, Google OAuth is used for account identity. Hermex should request
-        only basic profile and email scopes. Hermex does not receive your Google password.
-      </p>
-    </section>
-
-    <section>
-      <h2>4. AI providers</h2>
-      <p>
-        If Hermex is configured with an external AI provider, chart context and prompt
-        payloads may be sent to that provider to generate interpretations. Self-hosted
-        users control their own provider, keys, and storage.
-      </p>
-    </section>
-
-    <section>
-      <h2>5. Analytics</h2>
-      <p>
-        Hermex can optionally load Google Analytics when a deployment operator sets a
-        Google Analytics measurement ID. This may send page-view and usage signals to
-        Google to help understand product usage. Local and self-hosted deployments can
-        leave analytics disabled by keeping this environment variable empty.
-      </p>
-    </section>
-
-    <section>
-      <h2>6. Hosted and self-hosted boundary</h2>
-      <p>
-        Self-hosted deployments are controlled by the operator who runs them. Hosted
-        Hermex at hermex.fun may later add account sync, donation, subscription, and
-        payment-related records.
-      </p>
-    </section>
-
-    <section>
-      <h2>7. Contact</h2>
-      <p>
-        For privacy questions, contact the project maintainer through the repository:
-        <a href="https://github.com/wauputr4/hermex">github.com/wauputr4/hermex</a>.
-      </p>
-    </section>
+    <aside><h2>Perlu bantuan soal data?</h2><p>Kirim email ke <a href="mailto:me@wau.my.id">me@wau.my.id</a>. Jelaskan akun atau profil yang dimaksud tanpa mengirim kata sandi.</p></aside>
   </article>
 </main>
 
 <style>
-  :global(body) {
-    margin: 0;
-    color: #45304f;
-    background: radial-gradient(circle at 14% 10%, rgba(244, 193, 93, .48), transparent 22rem),
-      radial-gradient(circle at 82% 12%, rgba(128, 213, 187, .42), transparent 24rem),
-      linear-gradient(145deg, #fff8df, #f5e4ee 54%, #dff5ed);
-    font-family: Avenir Next, Nunito, Trebuchet MS, sans-serif;
-  }
-
-  .legal-shell {
-    min-height: 100vh;
-    padding: 28px;
-    display: grid;
-    place-items: start center;
-  }
-
-  article {
-    width: min(860px, 100%);
-    border: 4px solid rgba(69, 48, 79, .12);
-    border-radius: 34px;
-    background: rgba(255, 253, 247, .9);
-    padding: clamp(22px, 5vw, 44px);
-    box-shadow: 0 28px 80px rgba(69, 48, 79, .14);
-  }
-
-  .back {
-    display: inline-flex;
-    margin-bottom: 20px;
-    color: #45304f;
-    font-weight: 950;
-    text-decoration: none;
-  }
-
-  .eyebrow {
-    margin: 0 0 8px;
-    color: #8f6884;
-    font-size: .78rem;
-    font-weight: 950;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    margin: 0 0 16px;
-    font-size: clamp(2.4rem, 8vw, 5.2rem);
-    line-height: .9;
-    letter-spacing: -.07em;
-  }
-
-  h2 {
-    margin: 28px 0 8px;
-  }
-
-  p {
-    color: rgba(69, 48, 79, .76);
-    font-weight: 760;
-    line-height: 1.65;
-  }
-
-  .lead {
-    font-size: 1.1rem;
-    color: #45304f;
-  }
-
-  a {
-    color: #365f90;
-    font-weight: 900;
+  :global(body) { margin: 0; background: #fbfaf7; color: #302a36; font-family: Avenir Next, Nunito, Trebuchet MS, sans-serif; }
+  main { width: min(1060px, calc(100% - 40px)); margin: auto; }
+  header { display: flex; min-height: 84px; align-items: center; justify-content: space-between; border-bottom: 1px solid #e7e1d9; }
+  .brand { display: flex; align-items: center; gap: 10px; color: #302a36; font-size: 1.1rem; font-weight: 820; text-decoration: none; }
+  .brand svg { width: 34px; height: 34px; box-sizing: border-box; padding: 6px; border-radius: 11px; background: #fff0ce; fill: #f1b86a; stroke: #302a36; stroke-width: 1.5; }
+  .back { display: inline-flex; align-items: center; gap: 7px; color: #615968; font-size: .92rem; font-weight: 700; text-decoration: none; }
+  article { padding: clamp(56px, 9vw, 104px) 0 80px; }
+  .intro { max-width: 780px; border-left: 5px solid #5b55d6; padding-left: clamp(20px, 4vw, 40px); }
+  .eyebrow { margin: 0 0 14px; color: #5b55d6; font-size: .76rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+  h1 { max-width: 760px; margin: 0; font-size: clamp(2.7rem, 7vw, 5.4rem); line-height: .96; letter-spacing: -.06em; }
+  .lead { max-width: 680px; margin: 28px 0 14px; color: #615968; font-size: clamp(1rem, 1.8vw, 1.2rem); line-height: 1.65; }
+  .updated { margin: 0; color: #8a828b; font-size: .82rem; }
+  .policy { margin-top: clamp(58px, 9vw, 96px); border-top: 1px solid #d7d0ca; }
+  section { display: grid; grid-template-columns: 52px 1fr; gap: 24px; padding: 30px 0; border-bottom: 1px solid #e7e1d9; }
+  section > span { color: #5b55d6; font-size: .78rem; font-weight: 800; letter-spacing: .06em; }
+  h2 { margin: 0 0 8px; font-size: clamp(1.15rem, 2vw, 1.4rem); letter-spacing: -.02em; }
+  section p, aside p { max-width: 720px; margin: 0; color: #615968; line-height: 1.7; }
+  section a, aside a { color: #4e48c8; font-weight: 750; }
+  aside { margin-top: 48px; border-radius: 18px; padding: 28px; background: #f2f0ff; }
+  a:focus-visible { border-radius: 6px; outline: 3px solid rgba(91,85,214,.28); outline-offset: 4px; }
+  @media (max-width: 560px) {
+    main { width: min(100% - 28px, 1060px); }
+    header { min-height: 72px; }
+    .back { font-size: 0; }
+    .back::after { content: 'Kembali'; font-size: .88rem; }
+    article { padding-top: 44px; }
+    section { grid-template-columns: 36px 1fr; gap: 12px; padding: 24px 0; }
+    aside { padding: 22px; }
   }
 </style>

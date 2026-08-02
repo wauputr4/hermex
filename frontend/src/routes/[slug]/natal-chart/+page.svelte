@@ -4,8 +4,10 @@
   import { getPublicProfile } from '$lib/api/hermex';
   export let data: any;
 
-  $: profile = data.publicProfile;
-  $: error = data.error;
+  let refreshedProfile: any = null;
+  let refreshError = '';
+  $: profile = refreshedProfile ?? data.publicProfile;
+  $: error = refreshError || data.error;
   $: chart = profile?.profile?.chart_highlights ?? {};
   $: traits = profile?.profile?.traits ?? {};
   $: planets = normalizePlanets(chart.planets);
@@ -16,7 +18,7 @@
 
   onMount(async () => {
     if (!data.username) return;
-    try { profile = await getPublicProfile(data.username); error = ''; } catch { /* Keep the public/private server state. */ }
+    try { refreshedProfile = await getPublicProfile(data.username); refreshError = ''; } catch { /* Keep the public/private server state. */ }
   });
 
   function normalizePlanets(value: unknown): any[] {
@@ -35,6 +37,14 @@
     return Number.isFinite(number) ? `${number.toFixed(2)}°` : '-';
   }
 
+  function angleText(value: unknown): string {
+    if (!value || typeof value !== 'object') return degree(value);
+    const angle = value as Record<string, unknown>;
+    const sign = title(angle.zodiac_sign ?? angle.sign ?? '');
+    const position = degree(angle.degree_in_sign ?? angle.longitude ?? angle.degree);
+    return sign && sign !== '-' ? `${sign} ${position}` : position;
+  }
+
   function aspectText(aspect: any): string {
     return `${title(aspect?.left ?? aspect?.left_planet)} ${title(aspect?.type ?? aspect?.aspect)} ${title(aspect?.right ?? aspect?.right_planet)}`;
   }
@@ -49,7 +59,7 @@
   <nav><a href="/">☆ hermex.fun</a><a href={profile?.username ? `/${profile.username}` : '/'}>← Kembali ke profil</a></nav>
 
   {#if error || !profile}
-    <section class="empty"><span aria-hidden="true">◎</span><h1>{error}</h1><p>Hasil lengkap hanya dapat dibuka jika pemilik mengizinkannya.</p><a href="/">Buat analisismu</a></section>
+    <section class="empty"><span aria-hidden="true">◎</span><h1>{error || 'Natal chart belum tersedia'}</h1><p>Hasil lengkap hanya dapat dibuka jika pemilik mengizinkannya.</p><a href="/">Buat analisismu</a></section>
   {:else}
     <header class="hero">
       <p>Detail natal chart</p>
@@ -86,7 +96,7 @@
 
       {#if angles.length || houseCusps.length}
         <div class="metric chart-grid">
-          {#if angles.length}<div><h3>Sudut utama</h3><ul>{#each angles as [name, value]}<li><span>{title(name)}</span><strong>{title(value)}</strong></li>{/each}</ul></div>{/if}
+          {#if angles.length}<div><h3>Sudut utama</h3><ul>{#each angles as [name, value]}<li><span>{title(name)}</span><strong>{angleText(value)}</strong></li>{/each}</ul></div>{/if}
           {#if houseCusps.length}<div><h3>House cusps</h3><ul>{#each houseCusps as cusp, index}<li><span>House {index + 1}</span><strong>{degree(cusp)}</strong></li>{/each}</ul></div>{/if}
         </div>
       {/if}

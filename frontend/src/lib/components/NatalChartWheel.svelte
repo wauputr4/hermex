@@ -8,7 +8,8 @@
 
   function point(planet: any, radius = 98) {
     const sign = signs.findIndex((item) => item.toLowerCase() === String(planet?.zodiac_sign ?? '').toLowerCase());
-    const longitude = Math.max(0, sign) * 30 + Number(planet?.degree_in_sign ?? 0);
+    if (sign < 0) return null;
+    const longitude = sign * 30 + Number(planet?.degree_in_sign ?? 0);
     const angle = (longitude - 90) * Math.PI / 180;
     return { x: 140 + Math.cos(angle) * radius, y: 140 + Math.sin(angle) * radius };
   }
@@ -30,7 +31,7 @@
   {#each aspects as aspect}
     {@const left = aspectPlanet(aspect, 'left')}
     {@const right = aspectPlanet(aspect, 'right')}
-    {#if left && right}
+    {#if left && right && point(left, 88) && point(right, 88)}
       {@const a = point(left, 88)}
       {@const b = point(right, 88)}
       <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#65cdb8" stroke-width="1.2" opacity=".72" />
@@ -38,8 +39,10 @@
   {/each}
   {#each planets as planet}
     {@const position = point(planet)}
-    <circle cx={position.x} cy={position.y} r="9" fill="#f1b86a" stroke="#302a36" stroke-width="1.5" />
-    <text x={position.x} y={position.y - 13} fill="#302a36" font-size="9" font-weight="800" text-anchor="middle">{short[String(planet?.name ?? '').toLowerCase()] ?? String(planet?.name ?? '').slice(0, 2)}</text>
+    {#if position}
+      <circle cx={position.x} cy={position.y} r="9" fill="#f1b86a" stroke="#302a36" stroke-width="1.5" />
+      <text x={position.x} y={position.y - 13} fill="#302a36" font-size="9" font-weight="800" text-anchor="middle">{short[String(planet?.name ?? '').toLowerCase()] ?? String(planet?.name ?? '').slice(0, 2)}</text>
+    {/if}
   {/each}
 </svg>
 

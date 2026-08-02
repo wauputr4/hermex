@@ -1,4 +1,6 @@
 import type { RequestHandler } from './$types';
+import { API_BASE } from '$lib/api/hermex';
+import { articleMeta } from '$lib/articleMeta';
 
 const escapeXml = (value: string) => value.replace(/[<>&'\"]/g, (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[char] || char);
 const wrap = (value: string, limit = 26) => {
@@ -11,11 +13,19 @@ const wrap = (value: string, limit = 26) => {
   return lines.slice(0, 4);
 };
 
-export const GET: RequestHandler = ({ url }) => {
-  const title = wrap(url.searchParams.get('title') || 'Berita dari Langit').map(escapeXml);
-  const month = escapeXml(url.searchParams.get('month') || 'Hermex');
-  const entity = escapeXml(url.searchParams.get('entity') || 'Peristiwa terpilih');
-  const aspect = escapeXml(url.searchParams.get('aspect') || 'Catatan langit');
+export const GET: RequestHandler = async ({ fetch, params }) => {
+  let post: any = null;
+  try {
+    const response = await fetch(`${API_BASE}/api/v1/sky-news`);
+    if (response.ok) post = ((await response.json()).posts || []).find((item: any) => item.slug === params.slug);
+  } catch {
+    // The fallback still produces a valid image if the API is unavailable.
+  }
+  const meta = articleMeta[params.slug];
+  const title = wrap(post?.title || 'Berita dari Langit').map(escapeXml);
+  const month = escapeXml(post?.tag?.split(' · ')[0] || 'Hermex');
+  const entity = escapeXml(meta?.entity || 'Peristiwa terpilih');
+  const aspect = escapeXml(meta?.aspect || 'Catatan langit');
   const titleSvg = title.map((line, index) => `<text x="86" y="${250 + index * 92}" class="title">${line}</text>`).join('');
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">

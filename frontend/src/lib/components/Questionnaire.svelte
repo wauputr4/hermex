@@ -44,7 +44,7 @@
       <div class="ratings">
         {#each [1, 2, 3, 4, 5] as value}
           <label class:filled={(answers[question.id] ?? 0) >= value}>
-            <input type="radio" name={question.id} value={value} aria-label={`${value} dari 5 bintang`} checked={answers[question.id] === value} on:change={() => onAnswer(question.id, value)} />
+            <input type="radio" name={question.id} value={value} aria-label={scaleLabels[String(value)] ?? `${value} dari 5`} checked={answers[question.id] === value} on:change={() => onAnswer(question.id, value)} />
             <span aria-hidden="true">★</span>
           </label>
         {/each}

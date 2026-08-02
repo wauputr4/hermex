@@ -57,6 +57,7 @@ UNSAFE_ADMIN_PASSWORD_VALUES = {
     "change_this_password",
     "change_this_admin_password",
 }
+UNSAFE_ADMIN_USERNAME_VALUES = {"", "admin", "change_this_admin_username"}
 
 DEFAULT_SYSTEM_PROMPT = """
 Anda adalah Hermes, analis kepribadian dan mentor reflektif.
@@ -71,6 +72,7 @@ Aturan:
 - Jangan mengarang data yang tidak ada di payload.
 - Return JSON valid saja dengan field:
   preview_summary, highlights, identity_keywords, username_suggestions, full_analysis, confidence, caveat.
+- Urutkan field persis seperti daftar di atas dan jangan bungkus JSON dengan markdown.
 - highlights harus tepat 3 string singkat.
 - identity_keywords harus tepat 3 object {"word": "satu kata", "icon": "satu emoji"}.
 - username_suggestions harus tepat 3 username lowercase yang boleh diedit pengguna.
@@ -147,7 +149,7 @@ class LLMConfigInput(BaseModel):
     api_key: str | None = Field(default=None, max_length=500)
     model: str | None = Field(default=None, max_length=160)
     temperature: float | None = Field(default=None, ge=0, le=2)
-    max_tokens: int | None = Field(default=None, ge=128, le=4000)
+    max_tokens: int | None = Field(default=None, ge=128, le=8000)
     requests_per_minute: int | None = Field(default=None, ge=1, le=300)
     requests_per_day: int | None = Field(default=None, ge=1, le=10000)
 
@@ -164,7 +166,7 @@ class EntitlementInput(BaseModel):
     status: str = Field(default="active", pattern="^(active|trialing|past_due|canceled|expired)$")
     requests_per_minute: int | None = Field(default=None, ge=1, le=300)
     requests_per_day: int | None = Field(default=None, ge=1, le=10000)
-    max_tokens: int | None = Field(default=None, ge=128, le=4000)
+    max_tokens: int | None = Field(default=None, ge=128, le=8000)
     source: str = Field(default="manual", max_length=80)
     external_id: str | None = Field(default=None, max_length=180)
     current_period_end: str | None = Field(default=None, max_length=80)
@@ -423,11 +425,6 @@ def init_db() -> None:
                         seed_time,
                     ),
                 )
-            elif existing_post["summary"].startswith("## ") or "## Sumber" in existing_post["body"] or "## Cara membaca" in existing_post["body"]:
-                conn.execute(
-                    "UPDATE sky_posts SET title = ?, tag = ?, summary = ?, body = ?, updated_at = ? WHERE slug = ?",
-                    (post["title"], post["tag"], post["summary"], post["body"], now_iso(), post["slug"]),
-                )
 
 
 def verify_admin_credentials(username_value: str, password_value: str) -> bool:
@@ -441,6 +438,19 @@ def verify_admin_credentials(username_value: str, password_value: str) -> bool:
     valid_user = secrets.compare_digest(username_value, username)
     valid_password = secrets.compare_digest(password_value, password)
     return valid_user and valid_password
+
+
+def validate_hosted_admin_configuration() -> None:
+    if is_local_public_app_url():
+        return
+    username = os.getenv("ADMIN_USERNAME", "admin")
+    password = os.getenv("ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
+    secret = os.getenv("ADMIN_SESSION_SECRET", DEFAULT_ADMIN_SESSION_SECRET)
+    unsafe_username = username in UNSAFE_ADMIN_USERNAME_VALUES or username.lower().startswith("change_this")
+    unsafe_password = password in UNSAFE_ADMIN_PASSWORD_VALUES or password.lower().startswith("change_this")
+    unsafe_secret = secret in UNSAFE_SECRET_VALUES or secret.lower().startswith("change_this")
+    if unsafe_username or unsafe_password or unsafe_secret:
+        raise RuntimeError("Hosted admin requires unique ADMIN_USERNAME, ADMIN_PASSWORD, and ADMIN_SESSION_SECRET values")
 
 
 def admin_session_secret() -> str:
@@ -733,7 +743,7 @@ def get_llm_config() -> dict[str, Any]:
         "api_key": get_setting("llm_api_key", os.getenv("LLM_API_KEY", "")).strip(),
         "model": get_setting("llm_model", os.getenv("LLM_MODEL", "gpt-4o-mini")).strip() or "gpt-4o-mini",
         "temperature": setting_float("llm_temperature", "LLM_TEMPERATURE", "0.4"),
-        "max_tokens": setting_int("llm_max_tokens", "LLM_MAX_TOKENS", "700"),
+        "max_tokens": setting_int("llm_max_tokens", "LLM_MAX_TOKENS", "8000"),
         "requests_per_minute": setting_int("llm_requests_per_minute", "LLM_REQUESTS_PER_MINUTE", "6"),
         "requests_per_day": setting_int("llm_requests_per_day", "LLM_REQUESTS_PER_DAY", "40"),
     }
@@ -783,20 +793,20 @@ def plan_default_limits(plan: str) -> dict[str, int]:
     base_limits = {
         "requests_per_minute": normalize_limit_value(config["requests_per_minute"], 1, 300, 6),
         "requests_per_day": normalize_limit_value(config["requests_per_day"], 1, 10000, 40),
-        "max_tokens": normalize_limit_value(config["max_tokens"], 128, 4000, 700),
+        "max_tokens": normalize_limit_value(config["max_tokens"], 128, 8000, 8000),
     }
     normalized_plan = plan.lower().strip()
     if normalized_plan in {"supporter", "paid", "pro", "plus"}:
         return {
             "requests_per_minute": env_int("SUPPORTER_REQUESTS_PER_MINUTE", 60),
             "requests_per_day": env_int("SUPPORTER_REQUESTS_PER_DAY", 1000),
-            "max_tokens": env_int("SUPPORTER_MAX_TOKENS", 1800),
+            "max_tokens": env_int("SUPPORTER_MAX_TOKENS", 8000),
         }
     if normalized_plan == "self_hosted":
         return {
             "requests_per_minute": env_int("SELF_HOSTED_REQUESTS_PER_MINUTE", 300),
             "requests_per_day": env_int("SELF_HOSTED_REQUESTS_PER_DAY", 10000),
-            "max_tokens": env_int("SELF_HOSTED_MAX_TOKENS", 4000),
+            "max_tokens": env_int("SELF_HOSTED_MAX_TOKENS", 8000),
         }
     return base_limits
 
@@ -810,7 +820,7 @@ def merge_entitlement_limits(plan: str, limits_json: str | None = None) -> dict[
     for key, minimum, maximum in (
         ("requests_per_minute", 1, 300),
         ("requests_per_day", 1, 10000),
-        ("max_tokens", 128, 4000),
+        ("max_tokens", 128, 8000),
     ):
         if key in custom_limits:
             limits[key] = normalize_limit_value(custom_limits[key], minimum, maximum, limits[key])
@@ -1119,7 +1129,7 @@ def compute_chart(payload: BirthProfileInput) -> dict[str, Any]:
     for planet in planets.values():
         planet.update(zodiac_position(planet["longitude"]))
 
-    ascendant = round((planets["sun"]["longitude"] + local_hour * 15) % 360, 3)
+    ascendant = round((float(planets.get("sun", {}).get("longitude", 0)) + local_hour * 15) % 360, 3)
     house_system = "equal_house_estimate"
     house_cusps = None
     midheaven = None
@@ -1268,7 +1278,7 @@ SIGN_RULERS = {
     "Capricorn": "saturn",
     "Aquarius": "saturn",
     "Pisces": "jupiter",
-}
+    }
 
 
 def circular_distance(left: float, right: float) -> float:
@@ -1920,8 +1930,50 @@ def parse_llm_content(content: str, raw: dict[str, Any] | None = None) -> dict[s
             except json.JSONDecodeError:
                 continue
         else:
+            recovered = recover_personality_json(text)
+            if recovered:
+                return normalize_llm_response(recovered)
             return normalize_llm_response({"summary": text or "LLM returned no message content.", **({"raw": raw} if raw else {})})
     return normalize_llm_response(value if isinstance(value, dict) else {"summary": value})
+
+
+def recover_personality_json(text: str) -> dict[str, Any]:
+    """Recover complete fields from a provider response truncated mid-JSON."""
+    decoder = json.JSONDecoder()
+
+    def value_for(key: str) -> Any:
+        marker = f'"{key}"'
+        start = text.find(marker)
+        if start < 0:
+            return None
+        start = text.find(":", start + len(marker))
+        if start < 0:
+            return None
+        try:
+            return decoder.raw_decode(text[start + 1 :].lstrip())[0]
+        except json.JSONDecodeError:
+            return None
+
+    recovered = {
+        key: value_for(key)
+        for key in ("preview_summary", "highlights", "identity_keywords", "username_suggestions", "confidence", "caveat")
+    }
+    sections = {
+        key: value_for(key)
+        for key in (
+            "core_identity",
+            "emotional_needs",
+            "social_approach",
+            "thinking_and_communication",
+            "relationships_and_values",
+            "drive_and_boundaries",
+            "inner_tensions",
+            "dominant_patterns",
+            "growth_focus",
+        )
+    }
+    recovered["full_analysis"] = {key: value for key, value in sections.items() if isinstance(value, str)}
+    return {key: value for key, value in recovered.items() if value not in (None, {}, [])}
 
 
 def stringify_response_item(item: Any) -> str:
@@ -2053,12 +2105,6 @@ def normalize_username_suggestions(value: Any, profile: dict[str, Any]) -> list[
         )
         if 3 <= len(username) <= 32 and username not in normalized:
             normalized.append(username)
-    fallbacks = local_personality_response(profile, "id")["username_suggestions"]
-    for username in fallbacks:
-        if username not in normalized:
-            normalized.append(username)
-        if len(normalized) == 3:
-            break
     return normalized[:3]
 
 
@@ -2074,11 +2120,6 @@ def normalize_identity_keywords(value: Any, profile: dict[str, Any]) -> list[dic
             normalized.append({"word": word, "icon": icon or "✦"})
         if len(normalized) == 3:
             return normalized
-    for item in local_personality_response(profile, "id")["identity_keywords"]:
-        if not any(entry["word"].lower() == item["word"].lower() for entry in normalized):
-            normalized.append(item)
-        if len(normalized) == 3:
-            break
     return normalized
 
 
@@ -2094,16 +2135,11 @@ def normalize_personality_response(response: dict[str, Any], profile: dict[str, 
             break
     full_analysis = response.get("full_analysis")
     if not isinstance(full_analysis, dict):
-        full_analysis = fallback["full_analysis"]
+        full_analysis = {}
     highlights = response.get("highlights")
     if not isinstance(highlights, list):
-        highlights = fallback["highlights"]
+        highlights = []
     normalized_highlights = [stringify_response_item(item) for item in highlights]
-    for item in fallback["highlights"]:
-        if item not in normalized_highlights:
-            normalized_highlights.append(item)
-        if len(normalized_highlights) == 3:
-            break
     preview_summary = str(response.get("preview_summary") or response.get("summary") or fallback["preview_summary"]).strip()
     if preview_summary.startswith("{") and '"preview_summary"' in preview_summary:
         preview_summary = preview_summary.split('"preview_summary"', 1)[1].split(":", 1)[-1].lstrip()
@@ -2116,20 +2152,13 @@ def normalize_personality_response(response: dict[str, Any], profile: dict[str, 
         "identity_keywords": normalize_identity_keywords(response.get("identity_keywords"), profile),
         "username_suggestions": normalize_username_suggestions(response.get("username_suggestions"), profile),
         "full_analysis": {
-            key: ensure_minimum_words(full_analysis.get(key), fallback["full_analysis"][key])
+            key: str(full_analysis[key]).strip()
             for key in fallback["full_analysis"]
+            if len(str(full_analysis.get(key) or "").split()) >= 50
         },
         "confidence": response.get("confidence") or profile["traits"]["confidence"],
         "caveat": profile.get("precision", {}).get("caveat") or response.get("caveat"),
     }
-
-
-def ensure_minimum_words(value: Any, fallback: str, minimum: int = 50) -> str:
-    text = str(value or "").strip()
-    if len(text.split()) >= minimum:
-        return text
-    combined = f"{text} {fallback}".strip()
-    return combined if len(combined.split()) >= minimum else fallback
 
 
 def guest_interpretation_view(response: dict[str, Any]) -> dict[str, Any]:
@@ -2177,7 +2206,7 @@ async def call_llm(
     api_key = config["api_key"]
     model = config["model"]
     temperature = config["temperature"]
-    max_tokens = normalize_limit_value(max_tokens_override, 128, 4000, config["max_tokens"])
+    max_tokens = normalize_limit_value(max_tokens_override, 128, 8000, config["max_tokens"])
 
     prompt_payload = {
         "profile_id": profile["profile_id"],
@@ -2222,7 +2251,7 @@ async def call_llm(
         "stream": False,
     }
 
-    if provider == "local_fallback" or not base_url or not api_key:
+    if provider == "local_fallback":
         return {
             "provider": "local_fallback",
             "model": "local-template",
@@ -2230,6 +2259,8 @@ async def call_llm(
             "request_payload": request_payload,
             "response": local_personality_response(profile, language),
         }
+    if not base_url or not api_key:
+        raise HTTPException(status_code=503, detail="Layanan AI belum dikonfigurasi. Coba lagi setelah pengaturan diperbarui.")
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -2240,13 +2271,7 @@ async def call_llm(
             )
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        return {
-            "provider": f"{provider}_error",
-            "model": model,
-            "prompt_hash": prompt_hash,
-            "request_payload": request_payload,
-            "response": local_personality_response(profile, language),
-        }
+        raise HTTPException(status_code=503, detail="Layanan AI sedang tidak tersedia. Coba lagi sebentar.") from exc
 
     try:
         data = response.json()
@@ -2261,13 +2286,7 @@ async def call_llm(
                 "request_payload": request_payload,
                 "response": normalize_personality_response(parse_llm_content(streamed_content), profile),
             }
-        return {
-            "provider": f"{provider}_non_json",
-            "model": model,
-            "prompt_hash": prompt_hash,
-            "request_payload": request_payload,
-            "response": local_personality_response(profile, language),
-        }
+        raise HTTPException(status_code=502, detail="Layanan AI mengirim respons yang tidak dapat dibaca. Coba lagi sebentar.")
 
     content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
     parsed = normalize_personality_response(parse_llm_content(content, raw=data), profile)
@@ -2295,6 +2314,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup() -> None:
+    validate_hosted_admin_configuration()
     init_db()
 
 
@@ -2476,10 +2496,20 @@ def delete_user_history(profile_id: str, request: Request) -> dict[str, Any]:
     user = require_google_user(request)
     user_sub = str(user.get("sub") or user.get("email"))
     with db() as conn:
-        conn.execute(
-            "DELETE FROM user_profiles WHERE user_sub = ? AND profile_id = ?",
+        owned = conn.execute(
+            "SELECT 1 FROM user_profiles WHERE user_sub = ? AND profile_id = ?",
             (user_sub, profile_id),
+        ).fetchone()
+        if not owned:
+            raise HTTPException(status_code=403, detail="Profile is not linked to this account")
+        conn.execute("DELETE FROM feedback WHERE profile_id = ?", (profile_id,))
+        conn.execute("DELETE FROM interpretations WHERE profile_id = ?", (profile_id,))
+        conn.execute("DELETE FROM public_profiles WHERE profile_id = ?", (profile_id,))
+        conn.execute(
+            "DELETE FROM user_profiles WHERE profile_id = ?",
+            (profile_id,),
         )
+        conn.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
     return {"status": "ok"}
 
 
@@ -3647,7 +3677,7 @@ def admin_dashboard_page(request: Request, section: str, id: str = "", limit: in
           <label>API key<input id="api-key" type="password" value="" autocomplete="new-password" placeholder="{'Kosongkan untuk mempertahankan API key' if config['has_api_key'] else 'Tempel API key'}" /></label>
           <label>Model<input id="model" value="{html.escape(config['model'])}" /></label>
           <label>Temperature<input id="temperature" type="number" min="0" max="2" step="0.1" value="{config['temperature']}" /></label>
-          <label>Token maksimum<input id="max-tokens" type="number" min="128" max="4000" value="{config['max_tokens']}" /></label>
+          <label>Token maksimum<input id="max-tokens" type="number" min="128" max="8000" value="{config['max_tokens']}" /></label>
           <label>Permintaan / menit<input id="rpm" type="number" min="1" max="300" value="{config['requests_per_minute']}" /></label>
           <label>Permintaan / hari<input id="rpd" type="number" min="1" max="10000" value="{config['requests_per_day']}" /></label>
         </div><div class="form-actions"><button class="button" id="save-provider" type="button">Simpan koneksi</button><button class="button secondary" id="sync-models" type="button">Cek model</button><a class="button secondary" href="/admin/dashboard/settings">Batal</a><span id="provider-status"></span></div>

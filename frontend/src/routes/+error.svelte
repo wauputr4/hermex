@@ -34,5 +34,5 @@
   .actions { display: flex; flex-wrap: wrap; gap: 10px; }
   .actions a, .actions button { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #5b55d6; border-radius: 12px; padding: 12px 16px; background: #5b55d6; color: #fff; font: inherit; font-weight: 780; text-decoration: none; cursor: pointer; }
   .actions button { background: transparent; color: #5b55d6; }
-  .actions :is(a, button):focus-visible { outline: 3px solid rgba(91,85,214,.25); outline-offset: 3px; }
+  .actions :is(a, button):focus-visible { outline: 3px solid #5b55d6; outline-offset: 3px; }
 </style>

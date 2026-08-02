@@ -1,14 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { API_BASE, getAuthMe, getProfileSettings, getUserHistory, updateProfileSettings } from '$lib/api/hermex';
+  import { API_BASE, deleteUserHistory, getAuthMe, getProfileSettings, getUserHistory, updateProfileSettings } from '$lib/api/hermex';
 
   let user: any = null;
   let profiles: any[] = [];
   let selected = '';
   let username = '';
+  let savedUsername = '';
   let isPublic = true;
   let status = '';
   let saving = false;
+  let deleting = false;
 
   onMount(async () => {
     try {
@@ -24,10 +26,18 @@
 
   async function choose(profileId: string) {
     selected = profileId;
-    const settings = await getProfileSettings(profileId);
-    username = settings.username;
-    isPublic = settings.is_public;
+    username = '';
+    savedUsername = '';
+    isPublic = true;
     status = '';
+    try {
+      const settings = await getProfileSettings(profileId);
+      username = settings.username ?? '';
+      savedUsername = settings.username ?? '';
+      isPublic = settings.is_public;
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Pengaturan profil belum bisa dimuat.';
+    }
   }
 
   async function save() {
@@ -37,11 +47,31 @@
     try {
       const result: any = await updateProfileSettings(selected, { username: username.trim().toLowerCase(), is_public: isPublic });
       username = result.username;
+      savedUsername = result.username;
       status = 'Perubahan tersimpan.';
     } catch (error) {
       status = error instanceof Error ? error.message : 'Perubahan belum tersimpan.';
     } finally {
       saving = false;
+    }
+  }
+
+  async function removeProfile() {
+    if (!selected || deleting || !window.confirm('Hapus data analisis ini? Profil, hasil, dan umpan baliknya tidak dapat dipulihkan.')) return;
+    deleting = true;
+    status = '';
+    try {
+      await deleteUserHistory(selected);
+      profiles = profiles.filter((profile) => profile.profile_id !== selected);
+      selected = '';
+      username = '';
+      savedUsername = '';
+      if (profiles[0]) await choose(profiles[0].profile_id);
+      else status = 'Data analisis telah dihapus.';
+    } catch (error) {
+      status = error instanceof Error ? error.message : 'Data belum bisa dihapus.';
+    } finally {
+      deleting = false;
     }
   }
 </script>
@@ -60,10 +90,11 @@
       <label class="visibility"><input type="checkbox" bind:checked={isPublic} /><span><strong>Tampilkan ke publik</strong><small>Matikan untuk menyembunyikan profil dari orang lain. Kamu tetap bisa membukanya saat login.</small></span></label>
       <button disabled={saving}>{#if saving}Menyimpan…{:else}<span aria-hidden="true">✓</span> Simpan perubahan{/if}</button>
       {#if status}<p role="status">{status}</p>{/if}
-      <a class="view" href={`/${username}`}>Lihat kartu karakter →</a>
+      <a class="view" href={`/${savedUsername}`}>Lihat kartu karakter →</a>
+      <button class="delete" type="button" disabled={deleting} on:click={removeProfile}><span aria-hidden="true">⌫</span> {deleting ? 'Menghapus…' : 'Hapus data analisis'}</button>
     </form>
   {:else if user}
-    <section class="empty"><h2>Belum ada kartu</h2><p>Selesaikan satu analisis agar pengaturan profil muncul di sini.</p><a href="/">Mulai analisis <span aria-hidden="true">→</span></a></section>
+    <section class="empty"><h2>Belum ada kartu</h2><p>Selesaikan satu analisis agar pengaturan profil muncul di sini.</p>{#if status}<p role="status">{status}</p>{/if}<a href="/">Mulai analisis <span aria-hidden="true">→</span></a></section>
   {:else if status}<p role="alert">{status}</p>{/if}
 </main>
 
@@ -90,6 +121,8 @@
   button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
   .empty a { display: grid; width: fit-content; place-items: center; }
   .view { color: #5b55d6; font-weight: 760; text-decoration: none; }
+  .delete { justify-self: start; min-height: auto; padding: 0; background: transparent; color: #a33c52; font-size: .82rem; font-weight: 760; }
+  .delete:hover { color: #84283d; text-decoration: underline; }
   :is(a, button):focus-visible { outline: 3px solid rgba(91,85,214,.28); outline-offset: 3px; }
   [role='status'], [role='alert'] { margin: 0; color: #5b55d6; }
 </style>
