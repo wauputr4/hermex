@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 try:
     import swisseph as swe
@@ -57,27 +57,31 @@ UNSAFE_ADMIN_PASSWORD_VALUES = {
     "change_this_password",
     "change_this_admin_password",
 }
+UNSAFE_ADMIN_USERNAME_VALUES = {"", "admin", "change_this_admin_username"}
 
 DEFAULT_SYSTEM_PROMPT = """
-Anda adalah Hermes, seorang ahli astrologi modern dan mentor reflektif.
-Analisis natal chart yang diberikan secara hati-hati berdasarkan posisi planet,
-zodiac sign, house estimate, aspect, lokasi, timezone, dan konteks profil.
+Anda adalah Hermes, analis kepribadian dan mentor reflektif.
+Gunakan data kelahiran, pola internal yang dihitung sistem, dan jawaban pengguna
+sebagai bahan refleksi. Data internal tidak perlu disebutkan kepada pengguna.
 Gunakan bahasa: {language}.
 
 Aturan:
-- Jangan menyatakan astrologi sebagai kepastian mutlak.
-- Jelaskan sebagai refleksi pengembangan diri dan arah eksplorasi karier.
-- Hubungkan interpretasi dengan data chart yang tersedia.
-- Jangan mengarang data chart yang tidak ada di payload.
+- Jangan gunakan istilah astrologi, zodiak, planet, rumah, aspek, atau natal chart.
+- Jangan menyatakan hasil sebagai diagnosis atau kepastian mutlak.
+- Hubungkan interpretasi dengan pola internal dan jawaban yang tersedia.
+- Jangan mengarang data yang tidak ada di payload.
 - Return JSON valid saja dengan field:
-  summary, strengths, weaknesses, love, interests, talents, careers,
-  five_year_roadmap, development_plan, confidence.
-- strengths, weaknesses, interests, talents, careers, love harus array string.
-- five_year_roadmap harus array object dengan year, theme, focus.
-- Untuk five_year_roadmap, gunakan 5 tahun terakhir yang sudah lewat, mundur dari tahun sekarang, bukan 5 tahun ke depan.
-- Isi setiap focus 1-2 kalimat yang cukup informatif.
-- development_plan boleh array object dengan horizon, focus, confidence.
-- Buat ringkas, praktis, dan mudah discan di kartu UI.
+  preview_summary, highlights, identity_keywords, username_suggestions, full_analysis, confidence, caveat.
+- Urutkan field persis seperti daftar di atas dan jangan bungkus JSON dengan markdown.
+- highlights harus tepat 3 string singkat.
+- identity_keywords harus tepat 3 object {"word": "satu kata", "icon": "satu emoji"}.
+- username_suggestions harus tepat 3 username lowercase yang boleh diedit pengguna.
+- full_analysis harus object dengan field: core_identity, emotional_needs,
+  social_approach, thinking_and_communication, relationships_and_values,
+  drive_and_boundaries, inner_tensions, dominant_patterns, growth_focus.
+- Setiap field full_analysis harus berupa paragraf Bahasa Indonesia minimal 50 kata.
+- Buat hangat, spesifik, praktis, dan mudah dipindai.
+- preview_summary harus 3-5 kalimat dengan panjang sekitar 80-140 kata.
 """.strip()
 
 ZODIAC_SIGNS = [
@@ -105,10 +109,27 @@ class BirthProfileInput(BaseModel):
     longitude: float | None = Field(default=None, ge=-180, le=180)
     timezone: str | None = Field(default=None, max_length=80)
 
+    @field_validator("birth_time")
+    @classmethod
+    def validate_birth_time(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        hour, minute = map(int, value.split(":"))
+        if hour > 23 or minute > 59:
+            raise ValueError("birth_time must use a valid 24-hour HH:MM value")
+        return value
+
 
 class ValidationInput(BaseModel):
     profile_id: str
+    claim_token: str = Field(min_length=16, max_length=160)
     answers: dict[str, Any] = Field(default_factory=dict)
+
+
+class QuestionnaireQuestionInput(BaseModel):
+    profile_id: str = Field(max_length=80)
+    claim_token: str = Field(min_length=16, max_length=160)
+    index: int = Field(ge=0, le=49)
 
 
 class InterpretationInput(BaseModel):
@@ -128,7 +149,7 @@ class LLMConfigInput(BaseModel):
     api_key: str | None = Field(default=None, max_length=500)
     model: str | None = Field(default=None, max_length=160)
     temperature: float | None = Field(default=None, ge=0, le=2)
-    max_tokens: int | None = Field(default=None, ge=128, le=4000)
+    max_tokens: int | None = Field(default=None, ge=128, le=8000)
     requests_per_minute: int | None = Field(default=None, ge=1, le=300)
     requests_per_day: int | None = Field(default=None, ge=1, le=10000)
 
@@ -145,7 +166,7 @@ class EntitlementInput(BaseModel):
     status: str = Field(default="active", pattern="^(active|trialing|past_due|canceled|expired)$")
     requests_per_minute: int | None = Field(default=None, ge=1, le=300)
     requests_per_day: int | None = Field(default=None, ge=1, le=10000)
-    max_tokens: int | None = Field(default=None, ge=128, le=4000)
+    max_tokens: int | None = Field(default=None, ge=128, le=8000)
     source: str = Field(default="manual", max_length=80)
     external_id: str | None = Field(default=None, max_length=180)
     current_period_end: str | None = Field(default=None, max_length=80)
@@ -166,6 +187,11 @@ class PublicProfileInput(BaseModel):
     claim_token: str | None = Field(default=None, min_length=16, max_length=160)
     display_name: str | None = Field(default=None, max_length=80)
     bio: str | None = Field(default=None, max_length=240)
+
+
+class OwnerProfileSettingsInput(BaseModel):
+    username: str = Field(min_length=3, max_length=32, pattern=r"^[a-z0-9_]+$")
+    is_public: bool = True
 
 
 class ProfileClaimInput(BaseModel):
@@ -201,16 +227,6 @@ class AstrologyCalendarInput(BaseModel):
 
 class AstrologyCalendarDeleteInput(BaseModel):
     id: str = Field(max_length=80)
-
-
-class QuestStartInput(BaseModel):
-    profile_id: str
-    quest_slug: str
-
-
-class QuestCompleteInput(BaseModel):
-    quest_id: str
-    result_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 @contextmanager
@@ -266,20 +282,6 @@ def init_db() -> None:
             conn.execute("ALTER TABLE interpretations ADD COLUMN request_payload_json TEXT NOT NULL DEFAULT '{}'")
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS user_quests (
-                id TEXT PRIMARY KEY,
-                profile_id TEXT NOT NULL,
-                quest_slug TEXT NOT NULL,
-                status TEXT NOT NULL,
-                score INTEGER NOT NULL DEFAULT 0,
-                result_json TEXT,
-                created_at TEXT NOT NULL,
-                completed_at TEXT
-            )
-            """
-        )
-        conn.execute(
-            """
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
@@ -308,11 +310,24 @@ def init_db() -> None:
                 email TEXT NOT NULL,
                 display_name TEXT,
                 bio TEXT,
+                avatar_url TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
             """
         )
+        public_profile_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(public_profiles)").fetchall()
+        }
+        if "avatar_url" not in public_profile_columns:
+            conn.execute("ALTER TABLE public_profiles ADD COLUMN avatar_url TEXT")
+        if "is_public" not in public_profile_columns:
+            conn.execute("ALTER TABLE public_profiles ADD COLUMN is_public INTEGER NOT NULL DEFAULT 1")
+        feedback_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(feedback)").fetchall()
+        }
+        if "user_sub" not in feedback_columns:
+            conn.execute("ALTER TABLE feedback ADD COLUMN user_sub TEXT")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS user_profiles (
@@ -385,9 +400,15 @@ def init_db() -> None:
                         seed_time,
                     ),
                 )
-        if conn.execute("SELECT COUNT(*) AS count FROM sky_posts").fetchone()["count"] == 0:
-            seed_time = now_iso()
-            for post in default_sky_posts():
+        retired_slugs = (
+            "setahun-di-langit-agustus-2025-juli-2026",
+            "desember-2025-batas-bukti-review",
+        )
+        conn.executemany("DELETE FROM sky_posts WHERE slug = ?", ((slug,) for slug in retired_slugs))
+        for post in default_sky_posts():
+            existing_post = conn.execute("SELECT summary, body FROM sky_posts WHERE slug = ?", (post["slug"],)).fetchone()
+            if not existing_post:
+                seed_time = now_iso()
                 conn.execute(
                     """
                     INSERT INTO sky_posts (id, slug, title, tag, summary, body, created_at, updated_at)
@@ -417,6 +438,19 @@ def verify_admin_credentials(username_value: str, password_value: str) -> bool:
     valid_user = secrets.compare_digest(username_value, username)
     valid_password = secrets.compare_digest(password_value, password)
     return valid_user and valid_password
+
+
+def validate_hosted_admin_configuration() -> None:
+    if is_local_public_app_url():
+        return
+    username = os.getenv("ADMIN_USERNAME", "admin")
+    password = os.getenv("ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
+    secret = os.getenv("ADMIN_SESSION_SECRET", DEFAULT_ADMIN_SESSION_SECRET)
+    unsafe_username = username in UNSAFE_ADMIN_USERNAME_VALUES or username.lower().startswith("change_this")
+    unsafe_password = password in UNSAFE_ADMIN_PASSWORD_VALUES or password.lower().startswith("change_this")
+    unsafe_secret = secret in UNSAFE_SECRET_VALUES or secret.lower().startswith("change_this")
+    if unsafe_username or unsafe_password or unsafe_secret:
+        raise RuntimeError("Hosted admin requires unique ADMIN_USERNAME, ADMIN_PASSWORD, and ADMIN_SESSION_SECRET values")
 
 
 def admin_session_secret() -> str:
@@ -535,7 +569,7 @@ def google_oauth_config(request: Request | None = None) -> dict[str, str]:
         "client_secret": os.getenv("GOOGLE_CLIENT_SECRET", "").strip(),
         "redirect_uri": os.getenv(
             "GOOGLE_REDIRECT_URI",
-            "http://127.0.0.1:5667/api/v1/auth/google/callback",
+            "http://127.0.0.1:5666/api/v1/auth/google/callback",
         ).strip(),
         "session_secret": google_session_secret(request),
     }
@@ -572,6 +606,33 @@ def require_google_user(request: Request) -> dict[str, Any]:
     return user
 
 
+def viewer_owns_profile(profile_id: str, request: Request) -> bool:
+    user = read_google_session(request)
+    user_sub = str((user or {}).get("sub") or (user or {}).get("email") or "")
+    if not user_sub:
+        return False
+    with db() as conn:
+        return bool(
+            conn.execute(
+                "SELECT 1 FROM user_profiles WHERE user_sub = ? AND profile_id = ?",
+                (user_sub, profile_id),
+            ).fetchone()
+        )
+
+
+def require_linked_profile_owner(profile_id: str, request: Request) -> dict[str, Any]:
+    user = require_google_user(request)
+    if not viewer_owns_profile(profile_id, request):
+        raise HTTPException(status_code=403, detail="This profile is not linked to the signed-in account")
+    return user
+
+
+def require_profile_owner(profile_id: str, request: Request) -> dict[str, Any] | None:
+    if os.getenv("SELF_HOSTED_FULL_ACCESS", "").lower() in {"1", "true", "yes", "on"}:
+        return read_google_session(request)
+    return require_linked_profile_owner(profile_id, request)
+
+
 def is_admin_request(request: Request) -> bool:
     session = verify_signed_session_token(
         request.cookies.get(ADMIN_COOKIE_NAME),
@@ -603,7 +664,7 @@ def require_admin(request: Request) -> bool:
 def login_page(error: str = "") -> str:
     return f"""
     <!doctype html>
-    <html lang="en">
+    <html lang="id">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -622,11 +683,11 @@ def login_page(error: str = "") -> str:
       <body>
         <form method="post" action="/admin/login">
           <h1>Hermex Admin</h1>
-          <p>Masuk untuk melihat guest history dan mengatur prompt Hermes.</p>
+          <p>Masuk buat cek aktivitas dan atur Hermex.</p>
           {f'<p class="error">{html.escape(error)}</p>' if error else ''}
           <label>Username<input name="username" autocomplete="username" /></label>
           <label>Password<input name="password" type="password" autocomplete="current-password" /></label>
-          <button type="submit">Login</button>
+          <button type="submit">Masuk</button>
         </form>
       </body>
     </html>
@@ -682,7 +743,7 @@ def get_llm_config() -> dict[str, Any]:
         "api_key": get_setting("llm_api_key", os.getenv("LLM_API_KEY", "")).strip(),
         "model": get_setting("llm_model", os.getenv("LLM_MODEL", "gpt-4o-mini")).strip() or "gpt-4o-mini",
         "temperature": setting_float("llm_temperature", "LLM_TEMPERATURE", "0.4"),
-        "max_tokens": setting_int("llm_max_tokens", "LLM_MAX_TOKENS", "700"),
+        "max_tokens": setting_int("llm_max_tokens", "LLM_MAX_TOKENS", "8000"),
         "requests_per_minute": setting_int("llm_requests_per_minute", "LLM_REQUESTS_PER_MINUTE", "6"),
         "requests_per_day": setting_int("llm_requests_per_day", "LLM_REQUESTS_PER_DAY", "40"),
     }
@@ -700,6 +761,16 @@ def public_llm_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
         "requests_per_day": config["requests_per_day"],
         "has_api_key": bool(config["api_key"]),
     }
+
+
+def masked_secret_label(value: str) -> str:
+    """Return a display-only hint without exposing the stored secret."""
+    secret = value.strip()
+    if not secret:
+        return "Belum disetel"
+    if len(secret) <= 6:
+        return f"{secret[:1]}{'•' * 6}{secret[-1:]}"
+    return f"{secret[:3]}{'•' * 8}{secret[-3:]}"
 
 
 def env_int(name: str, default: int) -> int:
@@ -722,20 +793,20 @@ def plan_default_limits(plan: str) -> dict[str, int]:
     base_limits = {
         "requests_per_minute": normalize_limit_value(config["requests_per_minute"], 1, 300, 6),
         "requests_per_day": normalize_limit_value(config["requests_per_day"], 1, 10000, 40),
-        "max_tokens": normalize_limit_value(config["max_tokens"], 128, 4000, 700),
+        "max_tokens": normalize_limit_value(config["max_tokens"], 128, 8000, 8000),
     }
     normalized_plan = plan.lower().strip()
     if normalized_plan in {"supporter", "paid", "pro", "plus"}:
         return {
             "requests_per_minute": env_int("SUPPORTER_REQUESTS_PER_MINUTE", 60),
             "requests_per_day": env_int("SUPPORTER_REQUESTS_PER_DAY", 1000),
-            "max_tokens": env_int("SUPPORTER_MAX_TOKENS", 1800),
+            "max_tokens": env_int("SUPPORTER_MAX_TOKENS", 8000),
         }
     if normalized_plan == "self_hosted":
         return {
             "requests_per_minute": env_int("SELF_HOSTED_REQUESTS_PER_MINUTE", 300),
             "requests_per_day": env_int("SELF_HOSTED_REQUESTS_PER_DAY", 10000),
-            "max_tokens": env_int("SELF_HOSTED_MAX_TOKENS", 4000),
+            "max_tokens": env_int("SELF_HOSTED_MAX_TOKENS", 8000),
         }
     return base_limits
 
@@ -749,7 +820,7 @@ def merge_entitlement_limits(plan: str, limits_json: str | None = None) -> dict[
     for key, minimum, maximum in (
         ("requests_per_minute", 1, 300),
         ("requests_per_day", 1, 10000),
-        ("max_tokens", 128, 4000),
+        ("max_tokens", 128, 8000),
     ):
         if key in custom_limits:
             limits[key] = normalize_limit_value(custom_limits[key], minimum, maximum, limits[key])
@@ -1007,19 +1078,16 @@ def chart_seed(payload: BirthProfileInput) -> int:
 
 
 def utc_birth_context(payload: BirthProfileInput) -> tuple[date, float, float]:
-    local_hour = 12.0
-    if payload.birth_time:
-        hh, mm = payload.birth_time.split(":")
-        local_hour = int(hh) + int(mm) / 60
-        try:
-            tzinfo = ZoneInfo(payload.timezone or "UTC")
-        except ZoneInfoNotFoundError:
-            tzinfo = timezone.utc
-        local_dt = datetime.combine(payload.birth_date, time(int(hh), int(mm)), tzinfo=tzinfo)
-        utc_dt = local_dt.astimezone(timezone.utc)
-        utc_hour = utc_dt.hour + utc_dt.minute / 60 + utc_dt.second / 3600
-        return utc_dt.date(), utc_hour, local_hour
-    return payload.birth_date, 12.0, local_hour
+    hh, mm = (payload.birth_time or "00:00").split(":")
+    local_hour = int(hh) + int(mm) / 60
+    try:
+        tzinfo = ZoneInfo(payload.timezone or "UTC")
+    except ZoneInfoNotFoundError:
+        tzinfo = timezone.utc
+    local_dt = datetime.combine(payload.birth_date, time(int(hh), int(mm)), tzinfo=tzinfo)
+    utc_dt = local_dt.astimezone(timezone.utc)
+    utc_hour = utc_dt.hour + utc_dt.minute / 60 + utc_dt.second / 3600
+    return utc_dt.date(), utc_hour, local_hour
 
 
 def compute_chart(payload: BirthProfileInput) -> dict[str, Any]:
@@ -1061,11 +1129,11 @@ def compute_chart(payload: BirthProfileInput) -> dict[str, Any]:
     for planet in planets.values():
         planet.update(zodiac_position(planet["longitude"]))
 
-    ascendant = None if payload.birth_time is None else round((planets["sun"]["longitude"] + local_hour * 15) % 360, 3)
+    ascendant = round((float(planets.get("sun", {}).get("longitude", 0)) + local_hour * 15) % 360, 3)
     house_system = "equal_house_estimate"
     house_cusps = None
     midheaven = None
-    if swe and payload.birth_time is not None and payload.latitude is not None and payload.longitude is not None:
+    if swe and payload.latitude is not None and payload.longitude is not None:
         try:
             jd = swe.julday(utc_date.year, utc_date.month, utc_date.day, utc_hour)
             cusps, ascmc = swe.houses_ex(jd, payload.latitude, payload.longitude, b"P")
@@ -1091,7 +1159,7 @@ def compute_chart(payload: BirthProfileInput) -> dict[str, Any]:
             "house_system": house_system,
             "cusps": house_cusps,
             "planet_houses": planet_houses,
-            "precision": "reduced_without_birth_time" if payload.birth_time is None else "time_based_estimate",
+            "precision": "reduced_assumed_midnight" if payload.birth_time is None else "time_based_estimate",
         },
         "aspects": build_aspects(planets),
         "location": {
@@ -1099,6 +1167,8 @@ def compute_chart(payload: BirthProfileInput) -> dict[str, Any]:
             "latitude": payload.latitude,
             "longitude": payload.longitude,
             "timezone": payload.timezone,
+            "effective_birth_time": payload.birth_time or "00:00",
+            "birth_time_assumed": payload.birth_time is None,
             "utc_date": utc_date.isoformat(),
             "utc_decimal_hour": round(utc_hour, 4),
         },
@@ -1195,26 +1265,343 @@ def build_trait_profile(chart: dict[str, Any], time_unknown: bool) -> dict[str, 
     }
 
 
-def validation_questions(payload: BirthProfileInput) -> list[dict[str, Any]]:
-    questions = []
-    if payload.birth_time is None:
-        questions.append(
-            {
-                "id": "birth_time_certainty",
-                "label": "How certain are you about your birth time?",
-                "type": "choice",
-                "choices": ["unknown", "approximate", "known_later"],
-            }
+SIGN_RULERS = {
+    "Aries": "mars",
+    "Taurus": "venus",
+    "Gemini": "mercury",
+    "Cancer": "moon",
+    "Leo": "sun",
+    "Virgo": "mercury",
+    "Libra": "venus",
+    "Scorpio": "mars",
+    "Sagittarius": "jupiter",
+    "Capricorn": "saturn",
+    "Aquarius": "saturn",
+    "Pisces": "jupiter",
+    }
+
+
+def circular_distance(left: float, right: float) -> float:
+    distance = abs(left - right) % 360
+    return min(distance, 360 - distance)
+
+
+def aspects_to_point(planets: dict[str, dict[str, Any]], point: float | None) -> list[dict[str, Any]]:
+    if point is None:
+        return []
+    major = {"conjunction": 0, "sextile": 60, "square": 90, "trine": 120, "opposition": 180}
+    matches = []
+    for name, planet in planets.items():
+        distance = circular_distance(float(planet["longitude"]), point)
+        for aspect_name, angle in major.items():
+            orb = abs(distance - angle)
+            if orb <= 6:
+                matches.append({"planet": name, "type": aspect_name, "orb": round(orb, 2)})
+                break
+    return sorted(matches, key=lambda item: item["orb"])
+
+
+def derive_personality_signals(chart: dict[str, Any]) -> dict[str, Any]:
+    planets = chart["planets"]
+    houses = chart["houses"]
+    planet_houses = houses.get("planet_houses") or {}
+    ascendant = houses.get("ascendant")
+    ascendant_sign = (houses.get("ascendant_zodiac") or {}).get("zodiac_sign")
+    ruler_name = SIGN_RULERS.get(ascendant_sign or "", "sun")
+
+    angles = {
+        "ascendant": ascendant,
+        "descendant": None if ascendant is None else (ascendant + 180) % 360,
+        "midheaven": houses.get("midheaven"),
+        "imum_coeli": None if houses.get("midheaven") is None else (houses["midheaven"] + 180) % 360,
+    }
+    angular_planets = []
+    for name, planet in planets.items():
+        nearest = min(
+            (
+                (angle_name, circular_distance(float(planet["longitude"]), float(angle)))
+                for angle_name, angle in angles.items()
+                if angle is not None
+            ),
+            key=lambda item: item[1],
+            default=None,
         )
-    questions.append(
-        {
-            "id": "current_pull",
-            "label": "Which work style feels most energizing right now?",
-            "type": "choice",
-            "choices": ["building", "teaching", "organizing", "supporting"],
-        }
+        if nearest and nearest[1] <= 8:
+            angular_planets.append({"planet": name, "angle": nearest[0], "orb": round(nearest[1], 2)})
+
+    house_counts: dict[str, int] = {}
+    for house in planet_houses.values():
+        if house is not None:
+            house_counts[str(house)] = house_counts.get(str(house), 0) + 1
+    dominant_houses = sorted(house_counts.items(), key=lambda item: (-item[1], int(item[0])))[:3]
+
+    element_counts = {element: 0 for element in ("fire", "earth", "air", "water")}
+    modality_counts = {modality: 0 for modality in ("cardinal", "fixed", "mutable")}
+    for planet in planets.values():
+        element_counts[planet["element"]] += 1
+        modality_counts[planet["modality"]] += 1
+
+    planet_scores = {name: 0 for name in planets}
+    for aspect in chart.get("aspects") or []:
+        planet_scores[aspect["left"]] += 1
+        planet_scores[aspect["right"]] += 1
+    for item in angular_planets:
+        planet_scores[item["planet"]] += 2
+    dominant_planet = max(planet_scores, key=planet_scores.get) if planet_scores else None
+
+    return {
+        "sun": {"position": planets.get("sun"), "house": planet_houses.get("sun")},
+        "moon": {"position": planets.get("moon"), "house": planet_houses.get("moon")},
+        "ascendant": {
+            "position": houses.get("ascendant_zodiac"),
+            "aspects": aspects_to_point(planets, ascendant),
+        },
+        "chart_ruler": {
+            "planet": ruler_name,
+            "position": planets.get(ruler_name),
+            "house": planet_houses.get(ruler_name),
+            "aspects": [
+                aspect
+                for aspect in chart.get("aspects") or []
+                if ruler_name in {aspect["left"], aspect["right"]}
+            ],
+        },
+        "mercury": {"position": planets.get("mercury"), "house": planet_houses.get("mercury")},
+        "venus": {"position": planets.get("venus"), "house": planet_houses.get("venus")},
+        "mars": {"position": planets.get("mars"), "house": planet_houses.get("mars")},
+        "major_aspects": chart.get("aspects") or [],
+        "angular_and_dominant_houses": {
+            "angular_planets": angular_planets,
+            "dominant_houses": [{"house": int(house), "count": count} for house, count in dominant_houses],
+        },
+        "overall_pattern": {
+            "elements": element_counts,
+            "modalities": modality_counts,
+            "dominant_element": max(element_counts, key=element_counts.get),
+            "dominant_modality": max(modality_counts, key=modality_counts.get),
+            "dominant_planet": dominant_planet,
+        },
+    }
+
+
+QUESTIONNAIRE_COUNT = 10
+QUESTIONNAIRE_WORD_MIN = 8
+QUESTIONNAIRE_WORD_MAX = 22
+
+
+def build_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
+    overall = signals["overall_pattern"]
+    element = overall["dominant_element"]
+    modality = overall["dominant_modality"]
+    has_tension = any(
+        item.get("type") in {"square", "opposition"}
+        for item in signals.get("major_aspects") or []
     )
-    return questions
+    element_focus = {
+        "fire": "bergerak berani menuju pengalaman baru",
+        "earth": "membangun sesuatu yang nyata dan dapat diandalkan",
+        "air": "bertukar gagasan dan melihat banyak sudut pandang",
+        "water": "memahami perasaan serta suasana yang tidak terucap",
+    }
+    modality_focus = {
+        "cardinal": "mengambil langkah pertama saat arah belum jelas",
+        "fixed": "mempertahankan pilihan sampai prosesnya benar-benar selesai",
+        "mutable": "menyesuaikan cara ketika keadaan berubah dengan cepat",
+    }
+    house_focus = {
+        1: "cara membawa diri dan mengambil inisiatif",
+        2: "rasa aman, nilai pribadi, dan sumber daya",
+        3: "belajar, berbicara, dan memahami lingkungan dekat",
+        4: "keluarga, akar kehidupan, dan ruang pribadi",
+        5: "kreativitas, kesenangan, dan keberanian mengekspresikan diri",
+        6: "kebiasaan, pekerjaan harian, dan cara merawat diri",
+        7: "kemitraan, kompromi, dan hubungan dekat",
+        8: "kepercayaan, perubahan mendalam, dan hal yang dibagi",
+        9: "keyakinan, penjelajahan, dan pencarian makna",
+        10: "tanggung jawab, pencapaian, dan peran di masyarakat",
+        11: "persahabatan, komunitas, dan cita-cita bersama",
+        12: "refleksi, pemulihan, dan kebutuhan akan ruang sunyi",
+    }
+
+    def position_element(key: str) -> str:
+        position = (signals.get(key) or {}).get("position") or {}
+        return str(position.get("element") or element)
+
+    def position_modality(key: str) -> str:
+        position = (signals.get(key) or {}).get("position") or {}
+        return str(position.get("modality") or modality)
+
+    def position_house(key: str) -> str:
+        house = int((signals.get(key) or {}).get("house") or 1)
+        return house_focus[house]
+
+    ruler = signals.get("chart_ruler") or {}
+    ruler_position = ruler.get("position") or {}
+    visible_focus = signals.get("angular_and_dominant_houses") or {}
+    dominant_houses = visible_focus.get("dominant_houses") or []
+    dominant_house = int(dominant_houses[0]["house"]) if dominant_houses else 1
+    prompts = [
+        f"Saya paling menjadi diri sendiri saat {element_focus[position_element('sun')]} dalam {position_house('sun')}.",
+        f"Saya merasa aman saat {element_focus[position_element('moon')]} dalam {position_house('moon')}.",
+        f"Dalam situasi baru, saya cenderung {modality_focus[position_modality('ascendant')] }.",
+        f"Arah tindakan saya mengikuti dorongan untuk {modality_focus[str(ruler_position.get('modality') or modality)]} dalam {house_focus[int(ruler.get('house') or 1)]}.",
+        f"Saya memahami informasi dengan {element_focus[position_element('mercury')]}, terutama dalam {position_house('mercury')}.",
+        f"Saya membangun kedekatan dengan {element_focus[position_element('venus')]} dalam {position_house('venus')}.",
+        f"Saat mengejar tujuan, saya {modality_focus[position_modality('mars')]} dalam {position_house('mars')}.",
+        (
+            "Beberapa dorongan dalam diri saya sering beradu sebelum keputusan terasa mantap."
+            if has_tension
+            else "Pikiran, perasaan, dan tindakan saya biasanya saling mendukung ketika mengambil keputusan."
+        ),
+        (
+            f"Saya mudah terlihat menonjol saat terlibat dalam {house_focus[dominant_house]}."
+            if visible_focus.get("angular_planets")
+            else f"Perhatian saya sering kembali pada {house_focus[dominant_house]}, meski kesibukan berubah."
+        ),
+        f"Secara umum, saya berkembang dengan {element_focus[element]} sambil {modality_focus[modality]}.",
+    ]
+    questions = [
+        {"id": f"q_{index:02d}", "prompt": prompt}
+        for index, prompt in enumerate(prompts, start=1)
+    ]
+    return {
+        "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": {"1": "Sangat tidak sesuai", "5": "Sangat sesuai"},
+        },
+        "questions": questions,
+    }
+
+
+QUESTIONNAIRE_FORBIDDEN_TERMS = (
+    "astrologi",
+    "zodiak",
+    "planet",
+    "rumah",
+    "aspek",
+    "chart",
+    "natal",
+    "horoskop",
+    "transit",
+    "kosmik",
+    "ascendant",
+    "matahari",
+    "bulan",
+    "merkurius",
+    "venus",
+    "mars",
+    "jupiter",
+    "saturnus",
+    "uranus",
+    "neptunus",
+    "pluto",
+    "aries",
+    "taurus",
+    "gemini",
+    "cancer",
+    "leo",
+    "virgo",
+    "libra",
+    "scorpio",
+    "sagittarius",
+    "capricorn",
+    "aquarius",
+    "pisces",
+)
+
+
+def questionnaire_is_safe(questionnaire: dict[str, Any]) -> bool:
+    questions = questionnaire.get("questions") or []
+    if len(questions) != QUESTIONNAIRE_COUNT:
+        return False
+    prompts = [str(item.get("prompt") or "").strip() for item in questions]
+    public_text = " ".join(prompts).lower()
+    return (
+        all(QUESTIONNAIRE_WORD_MIN <= len(prompt.split()) <= QUESTIONNAIRE_WORD_MAX for prompt in prompts)
+        and not any(term in public_text for term in QUESTIONNAIRE_FORBIDDEN_TERMS)
+    )
+
+
+async def generate_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
+    fallback = build_questionnaire(signals)
+    config = get_llm_config()
+    if config["provider"] == "local_fallback" or not config["base_url"] or not config["api_key"]:
+        return fallback
+
+    request_payload = {
+        "model": config["model"],
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Buat tepat 10 pernyataan refleksi kepribadian berbahasa Indonesia untuk dinilai 1-5. "
+                    f"Setiap pernyataan harus {QUESTIONNAIRE_WORD_MIN}-{QUESTIONNAIRE_WORD_MAX} kata dan harus spesifik pada internal_signals yang diberikan. "
+                    "Bahas berurutan: identitas, kebutuhan emosi, cara hadir, arah tindakan, cara berpikir, "
+                    "relasi dan nilai, ketegasan dan batas, ketegangan batin, fokus hidup, lalu temperamen umum. "
+                    "Jangan sebut astrologi, zodiak, planet, rumah, aspek, chart, natal, horoskop, transit, atau kosmik. "
+                    "Kembalikan JSON valid saja: {\"questions\":[\"...\"]}."
+                ),
+            },
+            {"role": "user", "content": json.dumps({"internal_signals": signals}, sort_keys=True)},
+        ],
+        "temperature": config["temperature"],
+        "max_tokens": min(1200, max(500, config["max_tokens"])),
+        "stream": False,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"{config['base_url']}/chat/completions",
+                headers={"Authorization": f"Bearer {config['api_key']}", "Content-Type": "application/json"},
+                json=request_payload,
+            )
+        response.raise_for_status()
+        content = response.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        if content.startswith("```"):
+            content = content.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        prompts = json.loads(content).get("questions") or []
+        questionnaire = {
+            "scale": fallback["scale"],
+            "questions": [
+                {"id": f"q_{index:02d}", "prompt": str(prompt).strip()}
+                for index, prompt in enumerate(prompts, start=1)
+            ],
+        }
+    except (httpx.HTTPError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
+        return fallback
+    return questionnaire if questionnaire_is_safe(questionnaire) else fallback
+
+
+def questionnaire_question_view(profile: dict[str, Any], index: int) -> dict[str, Any]:
+    questionnaire = profile.get("questionnaire") or {}
+    questions = questionnaire.get("questions") or []
+    if index >= len(questions):
+        raise HTTPException(status_code=404, detail="Question not found")
+    question = questions[index]
+    return {
+        "profile_id": profile["profile_id"],
+        "questionnaire": {
+            "count": len(questions),
+            "scale": questionnaire.get("scale", {}),
+            "current_question": {"id": question["id"], "prompt": question["prompt"], "index": index},
+        },
+    }
+
+
+def validate_questionnaire_answers(profile: dict[str, Any], answers: dict[str, Any]) -> dict[str, int]:
+    questions = profile.get("questionnaire", {}).get("questions") or []
+    expected_ids = {question["id"] for question in questions}
+    if not expected_ids:
+        return {}
+    if set(answers) != expected_ids:
+        raise HTTPException(status_code=422, detail="Every questionnaire item must be answered exactly once")
+    normalized: dict[str, int] = {}
+    for question_id, value in answers.items():
+        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 5:
+            raise HTTPException(status_code=422, detail=f"Answer {question_id} must be an integer from 1 to 5")
+        normalized[question_id] = value
+    return normalized
 
 
 def roadmap_for(profile: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1277,27 +1664,36 @@ def latest_interpretation(profile_id: str, public_only: bool = False) -> dict[st
             break
     if not selected_row:
         return None
+    profile = load_profile(profile_id)
+    response = normalize_personality_response(json.loads(selected_row["response_json"]), profile)
     return {
         "interpretation_id": selected_row["id"],
         "provider": selected_row["provider"],
         "model": selected_row["model"],
-        "interpretation": json.loads(selected_row["response_json"]),
+        "interpretation": response,
         "created_at": selected_row["created_at"],
     }
 
 
-def public_profile_payload(row: sqlite3.Row) -> dict[str, Any]:
+def public_profile_payload(row: sqlite3.Row, viewer_is_owner: bool = False) -> dict[str, Any]:
     profile = public_profile_view(load_profile(row["profile_id"]))
-    return {
+    latest = latest_interpretation(row["profile_id"], public_only=True)
+    payload = {
         "username": row["username"],
         "display_name": row["display_name"] or profile.get("display_name"),
         "bio": row["bio"],
+        "avatar_url": row["avatar_url"],
+        "is_public": bool(row["is_public"]),
+        "viewer_is_owner": viewer_is_owner,
         "profile": profile,
-        "latest_interpretation": latest_interpretation(row["profile_id"], public_only=True),
-        "public_url": f"{public_app_url()}/@{row['username']}",
+        "latest_interpretation": latest,
+        "public_url": f"{public_app_url()}/{row['username']}",
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+    if viewer_is_owner:
+        payload["profile_id"] = row["profile_id"]
+    return payload
 
 
 def public_profile_view(profile: dict[str, Any]) -> dict[str, Any]:
@@ -1306,8 +1702,7 @@ def public_profile_view(profile: dict[str, Any]) -> dict[str, Any]:
     houses = chart.get("houses", {}).get("planet_houses", {})
     planets = chart.get("planets", {})
     public_planets = []
-    for name in ("sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn"):
-        planet = planets.get(name)
+    for name, planet in planets.items():
         if not isinstance(planet, dict):
             continue
         public_planets.append(
@@ -1315,9 +1710,14 @@ def public_profile_view(profile: dict[str, Any]) -> dict[str, Any]:
                 "name": name,
                 "zodiac_sign": planet.get("zodiac_sign"),
                 "degree_in_sign": planet.get("degree_in_sign"),
+                "longitude": planet.get("longitude"),
+                "element": planet.get("element"),
+                "modality": planet.get("modality"),
                 "house": houses.get(name),
             }
         )
+    house_data = chart.get("houses") or {}
+    signals = profile.get("personality_signals") or {}
     return {
         "display_name": profile.get("display_name"),
         "traits": {
@@ -1329,35 +1729,143 @@ def public_profile_view(profile: dict[str, Any]) -> dict[str, Any]:
         },
         "chart_highlights": {
             "planets": public_planets,
+            "aspects": chart.get("aspects") or [],
             "aspects_count": len(chart.get("aspects") or []),
-            "house_system": chart.get("houses", {}).get("house_system"),
+            "house_system": house_data.get("house_system"),
+            "house_cusps": house_data.get("cusps") or [],
+            "angles": {
+                "ascendant": house_data.get("ascendant_zodiac"),
+                "midheaven": house_data.get("midheaven_zodiac"),
+            },
+            "chart_ruler": signals.get("chart_ruler"),
+            "angular_and_dominant_houses": signals.get("angular_and_dominant_houses"),
+            "overall_pattern": signals.get("overall_pattern"),
         },
     }
 
 
 def default_sky_posts() -> list[dict[str, str]]:
+    articles = [
+        ("agustus-2025-ai-uranus-dan-gelembung", "Agustus 2025: Ketika Gelembung AI Mulai Dipertanyakan", """## Peristiwa yang terjadi
+Pada 19 Agustus, NASA mengumumkan penemuan satelit kecil baru yang mengorbit Uranus melalui pengamatan James Webb Space Telescope. Dua hari kemudian, laporan tentang studi MIT ramai diberitakan karena menyimpulkan sebagian besar proyek AI generatif perusahaan yang diteliti belum menunjukkan dampak terukur pada laba-rugi. Keduanya adalah kejadian berbeda: satu penemuan astronomi, satu evaluasi ekonomi teknologi.
+
+## Kaitannya dengan langit
+Berita AI itu muncul dekat konjungsi Saturnus–Neptunus dan oposisi Mars. Saturnus dibaca sebagai pengujian realitas, Neptunus sebagai gambaran ekspektasi atau gelembung, dan Mars sebagai tekanan yang “menusuk” optimisme. Penemuan satelit Uranus terasa lebih literal: Uranus baru memasuki Gemini, tanda yang berkaitan dengan informasi dan penemuan.
+
+Hubungan tersebut merupakan interpretasi retrospektif, bukan bukti planet menyebabkan laporan MIT atau penemuan NASA. Fakta peristiwanya dapat diperiksa pada arsip NASA 19 Agustus 2025 dan laporan media mengenai studi MIT. Lapisan astrologis hanya menjelaskan mengapa pembicara menilai simbol dan waktu kejadiannya menarik setelah berita muncul.
+
+## Sumber
+Review astrologis: segmen berita September Astrology Forecast 2025, The Astrology Podcast. Verifikasi fakta: NASA Science, “New Moon Discovered Orbiting Uranus Using NASA’s Webb Telescope”; MIT Project NANDA dan laporan Axios 21 Agustus 2025."""),
+        ("september-2025-kimmel-dan-siklus-24-tahun", "September 2025: Penangguhan Jimmy Kimmel dan Pengulangan 24 Tahun", """## Peristiwa yang terjadi
+ABC menghentikan sementara Jimmy Kimmel Live pada 17 September 2025 setelah komentar Kimmel mengenai pembunuhan Charlie Kirk memicu tekanan dari afiliasi jaringan dan pejabat komunikasi federal. Program itu kembali mengudara beberapa hari kemudian. Peristiwa tersebut menjadi perdebatan nasional tentang kebebasan berbicara, tekanan pemerintah, dan batas tanggung jawab penyiaran.
+
+## Kaitannya dengan langit
+Tanggalnya punya kemiripan dengan kasus Bill Maher. Maher juga terkena sanksi ABC pada 17 September 2001 setelah komentarnya mengenai serangan 11 September, lalu posisinya kelak digantikan Kimmel. Jarak tepat 24 tahun dibaca sebagai dua putaran Jupiter yang masing-masing sekitar dua belas tahun, dipadukan dengan pola delapan tahunan Venus. Uranus yang sedang berhenti di Gemini menjadi simbol gangguan pada media, komunikasi, dan kebebasan berbicara.
+
+Ini bukan klaim bahwa siklus planet menangguhkan sebuah acara televisi. Keputusan ABC, tekanan afiliasi, pernyataan regulator, dan respons publik tetap merupakan proses manusia yang terdokumentasi. Astrologi di sini adalah cara pembicara membaca pengulangan waktu setelah kedua peristiwa diketahui, bukan alat untuk menggantikan sebab sosial dan politik yang dapat diuji.
+
+## Sumber
+Review astrologis: segmen berita October Astrology Forecast 2025. Verifikasi fakta: Reuters, ABC News, serta pengumuman jaringan pada 17–23 September 2025."""),
+        ("oktober-2025-pencurian-louvre", "Oktober 2025: Tujuh Menit Pencurian di Louvre", """## Peristiwa yang terjadi
+Pada 19 Oktober 2025 sekitar pukul 09.30, sekelompok pencuri memasuki Galerie d’Apollon di Museum Louvre menggunakan tangga angkut, memecahkan etalase, lalu membawa kabur perhiasan bersejarah kerajaan Prancis. Interpol dan otoritas museum kemudian mengonfirmasi barang curian serta memasukkannya ke basis data karya seni curian. Aksi berlangsung cepat di tengah jam kunjungan museum.
+
+## Kaitannya dengan langit
+Pencurian itu terjadi saat konjungsi Merkurius–Mars di Scorpio mendekati puncaknya. Merkurius diasosiasikan dengan mobilitas, taktik, dan pencurian; Mars dengan pembobolan serta tindakan agresif; sementara Scorpio menambah tema sesuatu yang tersembunyi dan bernilai. Konfigurasi tersebut juga berada dekat horizon timur pada waktu kejadian.
+
+Korelasi simbolis ini tidak menjelaskan kegagalan keamanan, pilihan pelaku, atau mekanisme pencurian. Penyelidikan kriminal tetap bergantung pada rekaman, saksi, bukti forensik, dan kerja kepolisian. Kaitan langitnya dibaca sesudah fakta diketahui, tanpa mengubah interpretasi menjadi penyebab.
+
+## Sumber
+Review astrologis: segmen berita November Astrology Forecast 2025. Verifikasi fakta: pernyataan resmi Musée du Louvre, basis data Interpol, dan laporan AP pada 19–20 Oktober 2025."""),
+        ("november-2025-cloudflare-dan-merkurius", "November 2025: Ketika Gangguan Cloudflare Menjalar ke Mana-mana", """## Peristiwa yang terjadi
+Pada 18 November 2025, gangguan pada infrastruktur Cloudflare membuat banyak layanan daring tidak dapat diakses atau bekerja tidak stabil. Dampaknya terasa luas karena Cloudflare berada di antara pengguna dan banyak situs sebagai penyedia jaringan, keamanan, dan penyaring lalu lintas. Insiden itu muncul pada bulan yang juga dipenuhi pembatalan penerbangan di Amerika Serikat dan gangguan logistik lain.
+
+## Kaitannya dengan langit
+Gangguan tersebut terjadi pada periode Merkurius retrograde yang beroposisi dengan Uranus. Merkurius mewakili pertukaran data, perjalanan, serta jaringan penghubung; Uranus digunakan untuk perubahan mendadak dan kerusakan yang menyebar secara tak terduga. Oposisi keduanya dibaca sebagai gambaran sistem komunikasi yang terganggu dari dua sisi, setelah gangguannya tercatat.
+
+Penyebab teknis Cloudflare tetap harus dibaca dari laporan insiden perusahaan, bukan dari konfigurasi planet. Perangkat lunak, kapasitas jaringan, proses operasional, dan respons teknisi adalah penjelasan kausal yang sebenarnya. Astrologi hanya menjadi lapisan tentang waktu dan simbol, sehingga laporan kejadian tetap perlu dipisahkan dari interpretasinya.
+
+## Sumber
+Review astrologis: segmen berita December Astrology Forecast 2025. Verifikasi fakta: laporan insiden Cloudflare 18 November 2025 dan pemberitaan teknologi pada hari yang sama."""),
+        ("januari-2026-minneapolis-mars-pluto", "Januari 2026: Kekerasan di Minneapolis dan Mars–Pluto", """## Peristiwa yang terjadi
+Operasi imigrasi federal di Minneapolis memicu protes besar setelah dua warga sipil ditembak mati dalam insiden terpisah pada Januari 2026. Renee Nicole Good meninggal pada 7 Januari, sedangkan Alex Pretti meninggal pada 24 Januari. Kedua kasus menjadi pusat perdebatan tentang penggunaan kekuatan, kewenangan agen federal, dan akuntabilitas operasi penegakan imigrasi.
+
+## Kaitannya dengan langit
+Kematian pertama berdekatan dengan pertemuan Venus–Mars, lalu kematian kedua terjadi saat Mars mendekati Pluto di Aquarius. Mars diasosiasikan dengan tindakan bersenjata dan konflik, Pluto dengan konsentrasi kuasa, serta Aquarius dengan kelompok dan gerakan kolektif. Protes yang membesar sesudah insiden dibaca sebagai bagian dari pola simbolik itu.
+
+Interpretasi tersebut bukan penjelasan hukum maupun forensik. Keputusan petugas, kebijakan operasi, rekaman video, investigasi, dan proses peradilan adalah sumber untuk memahami mengapa kejadian berlangsung. Peta langit hanya memberi bingkai waktu setelah peristiwa terjadi. Memisahkan dua lapisan ini penting agar refleksi astrologis tidak mengaburkan korban, tanggung jawab institusional, atau bukti yang bisa diuji.
+
+## Sumber
+Review astrologis: segmen berita February Astrology Forecast 2026. Verifikasi fakta: laporan media dan pernyataan otoritas Minneapolis pada Januari 2026."""),
+        ("februari-2026-super-bowl-bad-bunny", "Februari 2026: Bad Bunny, Super Bowl, dan Identitas Puerto Riko", """## Peristiwa yang terjadi
+Bad Bunny membawakan pertunjukan paruh waktu Super Bowl pada 8 Februari 2026 dengan penampilan berbahasa Spanyol yang menonjolkan budaya Puerto Riko. Panggung olahraga terbesar di Amerika Serikat itu berubah menjadi momen budaya: musik, bahasa, identitas kepulauan, serta hubungan Puerto Riko dengan Amerika menjadi bagian dari percakapan publik.
+
+## Kaitannya dengan langit
+Momen tersebut berdekatan dengan pertemuan Saturnus–Neptunus dan siklus historis hubungan politik Puerto Riko–Amerika Serikat yang berulang dekat konfigurasi dua planet itu. Saturnus dibaca sebagai struktur negara dan batas kelembagaan; Neptunus sebagai identitas kolektif, budaya, serta batas yang menjadi kabur. Penampilan Bad Bunny menjadi manifestasi budaya yang terlihat, bukan keputusan politik formal.
+
+Kehadiran musisi, pilihan bahasa, desain pertunjukan, dan penerimaan publik mempunyai sebab produksi dan sosial yang konkret. Planet tidak memilih daftar lagu atau membuat kebijakan penyiaran. Kaitan astrologis adalah pembacaan pola sejarah setelah acara berlangsung. Nilainya, jika ada, berada pada pertanyaan reflektif tentang identitas dan struktur—bukan pada klaim bahwa satu konfigurasi kosmik menghasilkan satu pertunjukan.
+
+## Sumber
+Review astrologis: segmen berita March Astrology Forecast 2026. Verifikasi fakta: dokumentasi resmi Super Bowl dan laporan pertunjukan 8 Februari 2026."""),
+        ("maret-2026-sora-ditutup", "Maret 2026: OpenAI Menutup Sora", """## Peristiwa yang terjadi
+Pada 24 Maret 2026, OpenAI mengumumkan penghentian aplikasi video AI Sora. Aplikasi dan pengalaman web ditutup pada 26 April, sementara penghentian API dijadwalkan kemudian. Keputusan itu datang setelah Sora sempat viral, memicu perdebatan tentang deepfake, hak atas kemiripan wajah, biaya komputasi, dan hubungan industri kreatif dengan video generatif.
+
+## Kaitannya dengan langit
+Pengumuman itu muncul dekat pertemuan Matahari–Saturnus dan perubahan arah Merkurius setelah fase retrograde bersama Mars di Pisces. Saturnus menjadi simbol penghentian, batas, dan evaluasi kelayakan; Merkurius untuk produk komunikasi; Neptunus dan Pisces untuk citra sintetis yang menyulitkan pembedaan nyata dan rekaan. Hubungan ini dibaca setelah keputusan perusahaan diumumkan.
+
+Alasan bisnis Sora tetap berada pada strategi OpenAI, penggunaan produk, biaya, risiko, dan prioritas pengembangan model. Konfigurasi planet tidak menggantikan analisis produk atau pernyataan perusahaan. Artikel ini mempertahankan interpretasi astrologis sebagai komentar budaya atas waktunya, sambil menempatkan pengumuman resmi sebagai fakta utama yang dapat diperiksa.
+
+## Sumber
+Review astrologis: segmen berita April Astrology Forecast 2026. Verifikasi fakta: OpenAI Help Center, pengumuman OpenAI 24 Maret, serta laporan AP dan The Guardian."""),
+        ("april-2026-percobaan-serangan-dan-uranus", "April 2026: Serangan di Washington dan Ingres Uranus", """## Peristiwa yang terjadi
+Pada 25 April 2026, sebuah insiden keamanan terjadi ketika Donald Trump menghadiri rangkaian acara White House Correspondents’ Dinner di Washington. Peristiwa itu segera ditangani sebagai percobaan serangan terhadap presiden dan menjadi berita utama. Fakta detailnya harus mengikuti pembaruan aparat keamanan dan hasil penyelidikan, bukan spekulasi yang beredar pada jam-jam pertama.
+
+## Kaitannya dengan langit
+Insiden tersebut terjadi pada hari Uranus memasuki Gemini. Posisi Bulan juga membentuk sudut tegang terhadap Uranus dan menyentuh titik penting pada peta kelahiran Trump. Uranus dipakai sebagai simbol kejutan mendadak, sedangkan Gemini dikaitkan dengan acara media, informasi, dan ruang publik yang dipenuhi komunikasi.
+
+Korelasi waktu tidak menetapkan sebab. Pengamanan, tindakan pelaku, respons aparat, dan konteks politik adalah rangkaian nyata yang perlu diteliti melalui bukti. Bahkan dalam kerangka astrologi, kaitannya dibaca secara retrospektif. Artikel ini karena itu tidak memperluas interpretasi menjadi tuduhan, prediksi lanjutan, atau kepastian tentang motif.
+
+## Sumber
+Review astrologis: segmen berita May Astrology Forecast 2026. Verifikasi fakta: laporan aparat federal dan media arus utama mengenai insiden 25 April 2026."""),
+        ("mei-2026-ledakan-pabrik-kembang-api", "Mei 2026: Ledakan Pabrik Kembang Api dan Mars–Jupiter", """## Peristiwa yang terjadi
+Pada 4 Mei 2026, ledakan besar terjadi di sebuah pabrik kembang api di China dan menyebabkan puluhan korban meninggal serta luka-luka. Peristiwa ini merupakan kecelakaan industri yang harus dipahami melalui standar keselamatan, penyimpanan bahan peledak, pengawasan, dan hasil penyelidikan lokal—bukan melalui simbol astrologis.
+
+## Kaitannya dengan langit
+Waktu kejadian sekitar pukul 16.43 lokal menempatkan Mars dan Jupiter dekat sudut utama peta ketika keduanya membentuk square. Mars dibaca sebagai simbol api, ledakan, dan cedera; Jupiter sebagai pembesar skala. Karena lokasi tersebut memang memproduksi kembang api, gambarnya terasa sangat literal setelah peristiwa diketahui.
+
+Kesan simbolis tidak boleh mengurangi kebutuhan akan investigasi material. Jumlah bahan, prosedur kerja, kepatuhan bangunan, pelatihan pekerja, dan respons darurat adalah faktor yang dapat menjelaskan skala bencana. Astrologi di sini hanya merekam cara pembicara membaca kesamaan bahasa simbol dan waktu, tanpa menyatakan planet menyalakan ledakan atau menentukan jumlah korban.
+
+## Sumber
+Review astrologis: segmen berita June Astrology Forecast 2026. Fakta perlu dirujuk silang dengan laporan pemerintah setempat dan kantor berita mengenai ledakan 4 Mei 2026."""),
+        ("juni-2026-gempa-venezuela", "Juni 2026: Gempa Ganda Venezuela", """## Peristiwa yang terjadi
+Pada 24 Juni 2026, dua gempa kuat bermagnitudo 7,2 dan 7,5 mengguncang wilayah utara-tengah Venezuela dalam selang waktu singkat. Laporan kemanusiaan menggambarkan kerusakan luas, korban jiwa, pengungsian, dan tekanan pada layanan kesehatan. Angka korban terus berubah selama operasi pencarian, sehingga artikel ini tidak mengunci satu angka awal sebagai hasil akhir.
+
+## Kaitannya dengan langit
+Gempa ganda itu berdekatan dengan Mars yang mendekati Uranus di Gemini. Konfigurasinya juga dibandingkan dengan Mars–Uranus pada peta pendirian Venezuela, sebuah teknik yang disebut recurrence transit. Mars digunakan sebagai simbol pelepasan energi mendadak, sedangkan Uranus mewakili guncangan dan perubahan tiba-tiba.
+
+Gempa bumi mempunyai sebab geologis: pergerakan sesar, akumulasi tegangan, kedalaman, dan kondisi tanah. Astrologi tidak memprediksi lokasi atau menggantikan seismologi. Korelasi waktunya dibaca setelah kejadian. Informasi keselamatan dan dampak harus mengikuti lembaga geologi serta organisasi kemanusiaan, bukan penafsiran planet.
+
+## Sumber
+Review astrologis: segmen berita July Astrology Forecast 2026. Verifikasi fakta: UNFPA, UNICEF, UNHCR, laporan AP, dan laporan teknis gempa Venezuela 24 Juni 2026."""),
+        ("juli-2026-lindsey-graham", "Juli 2026: Wafatnya Lindsey Graham dan Recurrence Transit", """## Peristiwa yang terjadi
+Senator Amerika Serikat Lindsey Graham meninggal mendadak pada 11 Juli 2026 dalam usia 71 tahun. Temuan awal yang diberitakan menyebut robekan aorta sebagai kemungkinan penyebab. Pemakaman dan penghormatan publik kemudian menghadirkan pejabat Amerika serta tokoh internasional, mencerminkan panjangnya karier Graham dalam politik luar negeri dan pertahanan.
+
+## Kaitannya dengan langit
+Graham lahir dengan konjungsi Mars–Uranus dan meninggal beberapa hari setelah konfigurasi yang sama kembali terjadi di langit. Pola ini disebut recurrence transit: susunan planet kelahiran muncul kembali saat peristiwa penting terjadi. Mars dan Uranus digunakan sebagai bahasa simbol untuk kejadian yang mendadak, bukan diagnosis medis.
+
+Penyebab kematian harus mengikuti pemeriksaan medis, riwayat kesehatan, dan pernyataan keluarga atau pejabat. Recurrence transit tidak membuktikan mekanisme biologis dan tidak dapat digunakan untuk menyimpulkan risiko pada orang lain dengan susunan serupa. Hubungan waktunya dibaca setelah kematian diumumkan, sambil mempertahankan batas antara fakta medis dan interpretasi astrologis.
+
+## Sumber
+Review astrologis: segmen berita August Astrology Forecast 2026. Verifikasi fakta: laporan AP 28 Juli 2026 dan keterangan awal mengenai kematian Lindsey Graham."""),
+    ]
     return [
         {
-            "slug": "bulan-sebagai-ritme-harian",
-            "title": "Bulan sebagai ritme harian",
-            "tag": "Moon",
-            "summary": "Bulan sering dipakai sebagai bahasa simbolik untuk membaca ritme emosi, kebutuhan aman, dan kapan kita perlu jeda.",
-            "body": "Di Hermex, berita langit tidak dibaca sebagai sebab pasti peristiwa bumi. Ia dipakai sebagai lensa refleksi: ketika ritme terasa cepat, kita bisa bertanya apa yang perlu dirapikan, dilepas, atau dirawat.",
-        },
-        {
-            "slug": "merkurius-dan-cuaca-komunikasi",
-            "title": "Merkurius dan cuaca komunikasi",
-            "tag": "Mercury",
-            "summary": "Merkurius melambangkan cara berpikir, bahasa, belajar, dan transaksi ide antar orang.",
-            "body": "Saat tema Merkurius sedang terasa kuat, hubungan antara langit dan bumi bisa dibaca sebagai ajakan memperjelas pesan: menulis lebih ringkas, memeriksa asumsi, dan membuat keputusan dengan informasi yang cukup.",
-        },
-        {
-            "slug": "saturnus-dan-struktur-sosial",
-            "title": "Saturnus dan struktur sosial",
-            "tag": "Saturn",
-            "summary": "Saturnus sering dikaitkan dengan batas, struktur, tanggung jawab, dan proses menjadi dewasa.",
-            "body": "Dalam peristiwa sehari-hari, simbol Saturnus membantu membaca mengapa sistem, aturan, dan komitmen terasa penting. Bukan untuk menakut-nakuti, tapi untuk melihat area hidup yang minta fondasi lebih sehat.",
-        },
+            "slug": slug,
+            "title": title,
+            "tag": title.split(":", 1)[0],
+            "summary": body.splitlines()[1][:180].rstrip() + "…",
+            "body": body.split("\n\n## Sumber", 1)[0],
+        }
+        for slug, title, body in articles
     ]
 
 
@@ -1404,17 +1912,68 @@ def astrology_calendar_rows() -> list[dict[str, Any]]:
 
 
 def parse_llm_content(content: str, raw: dict[str, Any] | None = None) -> dict[str, Any]:
-    text = content.strip()
-    if text.startswith("```json"):
-        text = text.removeprefix("```json").removesuffix("```").strip()
-    elif text.startswith("```"):
-        text = text.removeprefix("```").removesuffix("```").strip()
+    value: Any = content.strip()
+    for _ in range(3):
+        if not isinstance(value, str):
+            break
+        text = value.strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            text = "\n".join(lines[1:-1] if lines and lines[-1].strip() == "```" else lines[1:]).strip()
+        candidates = [text]
+        if "{" in text and "}" in text:
+            candidates.append(text[text.find("{") : text.rfind("}") + 1])
+        for candidate in candidates:
+            try:
+                value = json.loads(candidate)
+                break
+            except json.JSONDecodeError:
+                continue
+        else:
+            recovered = recover_personality_json(text)
+            if recovered:
+                return normalize_llm_response(recovered)
+            return normalize_llm_response({"summary": text or "LLM returned no message content.", **({"raw": raw} if raw else {})})
+    return normalize_llm_response(value if isinstance(value, dict) else {"summary": value})
 
-    try:
-        parsed = json.loads(text)
-        return normalize_llm_response(parsed if isinstance(parsed, dict) else {"summary": parsed})
-    except json.JSONDecodeError:
-        return normalize_llm_response({"summary": text or "LLM returned no message content.", **({"raw": raw} if raw else {})})
+
+def recover_personality_json(text: str) -> dict[str, Any]:
+    """Recover complete fields from a provider response truncated mid-JSON."""
+    decoder = json.JSONDecoder()
+
+    def value_for(key: str) -> Any:
+        marker = f'"{key}"'
+        start = text.find(marker)
+        if start < 0:
+            return None
+        start = text.find(":", start + len(marker))
+        if start < 0:
+            return None
+        try:
+            return decoder.raw_decode(text[start + 1 :].lstrip())[0]
+        except json.JSONDecodeError:
+            return None
+
+    recovered = {
+        key: value_for(key)
+        for key in ("preview_summary", "highlights", "identity_keywords", "username_suggestions", "confidence", "caveat")
+    }
+    sections = {
+        key: value_for(key)
+        for key in (
+            "core_identity",
+            "emotional_needs",
+            "social_approach",
+            "thinking_and_communication",
+            "relationships_and_values",
+            "drive_and_boundaries",
+            "inner_tensions",
+            "dominant_patterns",
+            "growth_focus",
+        )
+    }
+    recovered["full_analysis"] = {key: value for key, value in sections.items() if isinstance(value, str)}
+    return {key: value for key, value in recovered.items() if value not in (None, {}, [])}
 
 
 def stringify_response_item(item: Any) -> str:
@@ -1442,6 +2001,175 @@ def normalize_llm_response(response: dict[str, Any]) -> dict[str, Any]:
         elif value:
             normalized[key] = [stringify_response_item(value)]
     return normalized
+
+
+def local_personality_response(profile: dict[str, Any], language: str) -> dict[str, Any]:
+    traits = profile["traits"]
+    dominant = traits["dominant_element"]
+    labels = {
+        "fire": ("inisiatif", "keberanian kreatif", "penggerak"),
+        "earth": ("ketekunan", "cara berpikir praktis", "pembangun"),
+        "air": ("rasa ingin tahu", "komunikasi", "penjelajahide"),
+        "water": ("kepekaan", "refleksi", "pengamat"),
+    }
+    strength, style, identity = labels.get(dominant, labels["air"])
+    caveat = profile.get("precision", {}).get("caveat")
+    if language == "en":
+        preview = (
+            f"You tend to lead with {strength}, supported by a {style} approach when reading people and situations. "
+            "You usually make progress by noticing patterns first, then turning them into a direction that feels meaningful. "
+            "This can make you thoughtful and adaptable, although competing needs may slow a decision when expectations are unclear. "
+            "Your strongest growth comes from naming your priorities early, checking what you genuinely need, and setting clear boundaries before taking on something new."
+        )
+        highlights = ["Learns from patterns", "Values meaningful progress", "Benefits from clear boundaries"]
+        identity_keywords = [
+            {"word": "Curious", "icon": "✦"},
+            {"word": "Clear", "icon": "◉"},
+            {"word": "Growing", "icon": "↗"},
+        ]
+    else:
+        preview = (
+            f"Kamu cenderung bergerak dengan {strength}, ditopang oleh {style} saat membaca orang dan situasi. "
+            "Biasanya kamu menangkap pola terlebih dahulu, lalu mengubahnya menjadi arah yang terasa bermakna dan masuk akal untuk dijalani. "
+            "Cara ini membuatmu peka sekaligus lentur, meski beberapa kebutuhan yang datang bersamaan dapat membuat keputusan terasa lebih lambat ketika ekspektasi belum jelas. "
+            "Perkembangan terbesarmu muncul saat kamu menyebut prioritas sejak awal, memeriksa kebutuhan diri dengan jujur, dan menetapkan batas sebelum menerima tanggung jawab baru."
+        )
+        highlights = ["Cepat membaca pola", "Mengutamakan kemajuan yang bermakna", "Berkembang dengan batas yang jelas"]
+        identity_keywords = [
+            {"word": "Peka", "icon": "✦"},
+            {"word": "Jernih", "icon": "◉"},
+            {"word": "Tumbuh", "icon": "↗"},
+        ]
+    full_analysis = {
+        "core_identity": preview,
+        "emotional_needs": (
+            "Kamu membutuhkan ruang yang cukup untuk mengenali perasaan sebelum merespons. Emosi biasanya menjadi lebih mudah dipahami "
+            "ketika kamu tidak dipaksa segera memberi jawaban dan dapat menamai apa yang sedang terjadi dengan jujur. Dukungan terbaik "
+            "datang dari suasana yang tenang, orang yang konsisten, serta kebiasaan sederhana untuk berhenti sejenak sebelum mengambil keputusan penting."
+        ),
+        "social_approach": (
+            "Kamu cenderung mengamati suasana terlebih dahulu lalu menyesuaikan cara hadir. Kepekaan ini membantu kamu membaca kebutuhan "
+            "kelompok tanpa harus selalu menjadi pusat perhatian. Namun, terlalu lama menimbang respons orang lain dapat membuat keinginanmu "
+            "sendiri kurang terlihat. Hubungan sosial terasa lebih ringan saat kamu menyampaikan posisi sejak awal, tetap ramah, dan tidak mengorbankan batas pribadi."
+        ),
+        "thinking_and_communication": (
+            "Kamu berkembang saat dapat mengolah pola lalu menjelaskannya dengan bahasamu sendiri. Pikiranmu bekerja baik ketika informasi "
+            "dapat disusun menjadi urutan yang jelas, dibandingkan, kemudian diuji lewat percakapan. Saat banyak hal datang bersamaan, catatan "
+            "singkat dan pertanyaan yang spesifik membantumu menjaga fokus. Orang lain lebih mudah mengikuti gagasanmu ketika kesimpulan disertai contoh yang konkret."
+        ),
+        "relationships_and_values": (
+            "Kedekatan terasa sehat ketika nilai pribadi dan kebutuhan bersama sama-sama punya tempat. Kamu menghargai hubungan yang tumbuh "
+            "melalui perhatian konsisten, percakapan terbuka, dan tindakan yang dapat dipercaya. Ada kecenderungan memberi banyak ruang kepada "
+            "orang lain, sehingga penting untuk menyebut kebutuhanmu tanpa menunggu mereka menebak. Kejelasan kecil sejak awal mencegah kecewa yang menumpuk diam-diam."
+        ),
+        "drive_and_boundaries": (
+            "Langkahmu paling kuat ketika tujuan dan batas dibuat jelas sejak awal. Kamu dapat bekerja tekun selama memahami alasan di balik "
+            "sebuah tanggung jawab dan melihat kemajuan yang nyata. Dorongan untuk membantu kadang membuat beban bertambah tanpa disadari. "
+            "Sebelum menyanggupi hal baru, periksa waktu, tenaga, dan prioritas agar ketegasanmu tetap hangat tanpa berubah menjadi kelelahan."
+        ),
+        "inner_tensions": (
+            "Keinginan bergerak cepat kadang perlu diseimbangkan dengan kebutuhan memastikan arah. Satu bagian dirimu ingin segera mencoba, "
+            "sementara bagian lain mencari kepastian agar risiko tetap terkendali. Tarik-menarik ini bukan kelemahan; ia dapat menjadi sistem "
+            "pemeriksaan yang berguna. Tetapkan batas waktu untuk menimbang, pilih langkah kecil yang bisa diuji, lalu evaluasi berdasarkan hasil nyata."
+        ),
+        "dominant_patterns": (
+            f"Tema {strength} dan {style} muncul berulang dalam cara kamu mengambil keputusan. Kamu biasanya mengumpulkan petunjuk, mencari "
+            "hubungan di antaranya, lalu memilih arah yang terasa masuk akal sekaligus selaras dengan nilai pribadi. Pola ini membuatmu kuat "
+            "dalam situasi yang membutuhkan pemahaman menyeluruh. Tantangannya adalah berhenti mencari satu petunjuk tambahan ketika informasi yang tersedia sebenarnya sudah cukup."
+        ),
+        "growth_focus": (
+            "Fokus pertumbuhanmu adalah membangun kebiasaan mengecek kebutuhan diri sebelum menyetujui tuntutan baru. Mulailah dengan "
+            "menanyakan apa yang benar-benar penting, sumber daya apa yang tersedia, dan batas mana yang tidak boleh dilewati. Latihan kecil "
+            "namun rutin akan lebih efektif daripada perubahan besar sesaat. Catat keputusan penting, tinjau hasilnya, lalu perbaiki cara memilih tanpa menghakimi diri."
+        ),
+    }
+    return {
+        "preview_summary": preview,
+        "highlights": highlights,
+        "identity_keywords": identity_keywords,
+        "username_suggestions": [f"{identity}tenang", f"{identity}bertumbuh", f"{identity}jernih"],
+        "full_analysis": full_analysis,
+        "confidence": traits["confidence"],
+        "caveat": caveat,
+    }
+
+
+def normalize_username_suggestions(value: Any, profile: dict[str, Any]) -> list[str]:
+    candidates = value if isinstance(value, list) else []
+    normalized = []
+    for item in candidates:
+        username = "".join(
+            char
+            for char in str(item).lower().replace(" ", "_")
+            if char in "abcdefghijklmnopqrstuvwxyz0123456789_"
+        )
+        if 3 <= len(username) <= 32 and username not in normalized:
+            normalized.append(username)
+    return normalized[:3]
+
+
+def normalize_identity_keywords(value: Any, profile: dict[str, Any]) -> list[dict[str, str]]:
+    candidates = value if isinstance(value, list) else []
+    normalized: list[dict[str, str]] = []
+    for item in candidates:
+        word = item.get("word") if isinstance(item, dict) else item
+        icon = item.get("icon") if isinstance(item, dict) else None
+        word = str(word or "").strip().split()[0][:20] if str(word or "").strip() else ""
+        icon = str(icon or "").strip()[:4]
+        if word and not any(entry["word"].lower() == word.lower() for entry in normalized):
+            normalized.append({"word": word, "icon": icon or "✦"})
+        if len(normalized) == 3:
+            return normalized
+    return normalized
+
+
+def normalize_personality_response(response: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+    fallback = local_personality_response(profile, "id")
+    for key in ("preview_summary", "summary"):
+        embedded = response.get(key)
+        if not isinstance(embedded, str):
+            continue
+        parsed = parse_llm_content(embedded)
+        if any(name in parsed for name in ("preview_summary", "full_analysis", "username_suggestions", "identity_keywords")):
+            response = {**response, **parsed}
+            break
+    full_analysis = response.get("full_analysis")
+    if not isinstance(full_analysis, dict):
+        full_analysis = {}
+    highlights = response.get("highlights")
+    if not isinstance(highlights, list):
+        highlights = []
+    normalized_highlights = [stringify_response_item(item) for item in highlights]
+    preview_summary = str(response.get("preview_summary") or response.get("summary") or fallback["preview_summary"]).strip()
+    if preview_summary.startswith("{") and '"preview_summary"' in preview_summary:
+        preview_summary = preview_summary.split('"preview_summary"', 1)[1].split(":", 1)[-1].lstrip()
+        if preview_summary.startswith('"'):
+            preview_summary = preview_summary[1:]
+        preview_summary = preview_summary.split('",', 1)[0].rstrip('"} \n').replace('\\"', '"').replace("\\n", " ")
+    return {
+        "preview_summary": preview_summary or fallback["preview_summary"],
+        "highlights": normalized_highlights[:3],
+        "identity_keywords": normalize_identity_keywords(response.get("identity_keywords"), profile),
+        "username_suggestions": normalize_username_suggestions(response.get("username_suggestions"), profile),
+        "full_analysis": {
+            key: str(full_analysis[key]).strip()
+            for key in fallback["full_analysis"]
+            if len(str(full_analysis.get(key) or "").split()) >= 50
+        },
+        "confidence": response.get("confidence") or profile["traits"]["confidence"],
+        "caveat": profile.get("precision", {}).get("caveat") or response.get("caveat"),
+    }
+
+
+def guest_interpretation_view(response: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "preview_summary": response.get("preview_summary") or response.get("summary", ""),
+        "highlights": list(response.get("highlights") or response.get("strengths") or [])[:3],
+        "identity_keywords": list(response.get("identity_keywords") or [])[:3],
+        "username_suggestions": list(response.get("username_suggestions") or [])[:3],
+        "confidence": response.get("confidence"),
+        "caveat": response.get("caveat"),
+    }
 
 
 def parse_sse_chat_content(text: str) -> str:
@@ -1478,7 +2206,7 @@ async def call_llm(
     api_key = config["api_key"]
     model = config["model"]
     temperature = config["temperature"]
-    max_tokens = normalize_limit_value(max_tokens_override, 128, 4000, config["max_tokens"])
+    max_tokens = normalize_limit_value(max_tokens_override, 128, 8000, config["max_tokens"])
 
     prompt_payload = {
         "profile_id": profile["profile_id"],
@@ -1492,9 +2220,10 @@ async def call_llm(
             "longitude": profile.get("longitude"),
             "timezone": profile.get("timezone"),
         },
-        "astrology_chart": profile["chart"],
+        "internal_birth_pattern": profile["chart"],
+        "personality_signals": profile.get("personality_signals", {}),
         "traits": profile["traits"],
-        "roadmap_preview": profile["roadmap_preview"],
+        "questionnaire": profile.get("questionnaire", {}),
         "validation": profile.get("validation", {}),
         "detail_question": question,
     }
@@ -1504,6 +2233,8 @@ async def call_llm(
         os.getenv("LLM_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT),
     )
     system_prompt = system_prompt_template.replace("{language}", language_name)
+    if "preview_summary" not in system_prompt or "identity_keywords" not in system_prompt:
+        system_prompt = f"{system_prompt}\n\n{DEFAULT_SYSTEM_PROMPT.replace('{language}', language_name)}"
     messages = [
         {
             "role": "system",
@@ -1520,24 +2251,16 @@ async def call_llm(
         "stream": False,
     }
 
-    if provider == "local_fallback" or not base_url or not api_key:
+    if provider == "local_fallback":
         return {
             "provider": "local_fallback",
             "model": "local-template",
             "prompt_hash": prompt_hash,
             "request_payload": request_payload,
-            "response": {
-                "summary": (
-                    "Hermex membuat roadmap reflektif lokal karena kredensial LLM belum dikonfigurasi."
-                    if language == "id"
-                    else "Hermex generated a local reflective roadmap because no LLM credentials were configured."
-                ),
-                "strengths": profile["traits"]["talents"],
-                "development_plan": profile["roadmap_preview"],
-                "careers": profile["traits"]["career_themes"],
-                "confidence": profile["traits"]["confidence"],
-            },
+            "response": local_personality_response(profile, language),
         }
+    if not base_url or not api_key:
+        raise HTTPException(status_code=503, detail="Layanan AI belum dikonfigurasi. Coba lagi setelah pengaturan diperbarui.")
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -1548,24 +2271,7 @@ async def call_llm(
             )
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        return {
-            "provider": f"{provider}_error",
-            "model": model,
-            "prompt_hash": prompt_hash,
-            "request_payload": request_payload,
-            "response": {
-                "summary": (
-                    "Provider LLM belum bisa dijangkau, jadi Hermex mengembalikan interpretasi lokal yang aman."
-                    if language == "id"
-                    else "The configured LLM provider could not be reached, so Hermex returned a safe local interpretation."
-                ),
-                "error": exc.__class__.__name__,
-                "strengths": profile["traits"]["talents"],
-                "development_plan": profile["roadmap_preview"],
-                "careers": profile["traits"]["career_themes"],
-                "confidence": profile["traits"]["confidence"],
-            },
-        }
+        raise HTTPException(status_code=503, detail="Layanan AI sedang tidak tersedia. Coba lagi sebentar.") from exc
 
     try:
         data = response.json()
@@ -1578,28 +2284,12 @@ async def call_llm(
                 "model": model,
                 "prompt_hash": prompt_hash,
                 "request_payload": request_payload,
-                "response": parse_llm_content(streamed_content),
+                "response": normalize_personality_response(parse_llm_content(streamed_content), profile),
             }
-        return {
-            "provider": f"{provider}_non_json",
-            "model": model,
-            "prompt_hash": prompt_hash,
-            "request_payload": request_payload,
-            "response": {
-                "summary": text[:1200] or (
-                    "Provider LLM mengembalikan respons non-JSON kosong."
-                    if language == "id"
-                    else "The configured LLM provider returned an empty non-JSON response."
-                ),
-                "strengths": profile["traits"]["talents"],
-                "development_plan": profile["roadmap_preview"],
-                "careers": profile["traits"]["career_themes"],
-                "confidence": profile["traits"]["confidence"],
-            },
-        }
+        raise HTTPException(status_code=502, detail="Layanan AI mengirim respons yang tidak dapat dibaca. Coba lagi sebentar.")
 
     content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-    parsed = parse_llm_content(content, raw=data)
+    parsed = normalize_personality_response(parse_llm_content(content, raw=data), profile)
     return {
         "provider": provider,
         "model": model,
@@ -1624,6 +2314,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup() -> None:
+    validate_hosted_admin_configuration()
     init_db()
 
 
@@ -1771,9 +2462,10 @@ def get_user_history(request: Request) -> dict[str, Any]:
     with db() as conn:
         rows = conn.execute(
             """
-            SELECT p.profile_json, up.linked_at
+            SELECT p.profile_json, up.linked_at, pp.username AS public_username, pp.is_public
             FROM user_profiles up
             JOIN profiles p ON p.id = up.profile_id
+            LEFT JOIN public_profiles pp ON pp.profile_id = up.profile_id
             WHERE up.user_sub = ?
             ORDER BY up.linked_at DESC
             """,
@@ -1792,6 +2484,8 @@ def get_user_history(request: Request) -> dict[str, Any]:
                 "profile": profile,
                 "interpretation": latest_interpretation(profile["profile_id"]),
                 "linked_at": row["linked_at"],
+                "public_username": row["public_username"],
+                "is_public": bool(row["is_public"]) if row["is_public"] is not None else None,
             }
         )
     return {"history": history}
@@ -1802,20 +2496,41 @@ def delete_user_history(profile_id: str, request: Request) -> dict[str, Any]:
     user = require_google_user(request)
     user_sub = str(user.get("sub") or user.get("email"))
     with db() as conn:
-        conn.execute(
-            "DELETE FROM user_profiles WHERE user_sub = ? AND profile_id = ?",
+        owned = conn.execute(
+            "SELECT 1 FROM user_profiles WHERE user_sub = ? AND profile_id = ?",
             (user_sub, profile_id),
+        ).fetchone()
+        if not owned:
+            raise HTTPException(status_code=403, detail="Profile is not linked to this account")
+        conn.execute("DELETE FROM feedback WHERE profile_id = ?", (profile_id,))
+        conn.execute("DELETE FROM interpretations WHERE profile_id = ?", (profile_id,))
+        conn.execute("DELETE FROM public_profiles WHERE profile_id = ?", (profile_id,))
+        conn.execute(
+            "DELETE FROM user_profiles WHERE profile_id = ?",
+            (profile_id,),
         )
+        conn.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
     return {"status": "ok"}
 
 
 @app.post("/api/v1/birth/analyze")
-def analyze_birth(payload: BirthProfileInput, request: Request) -> dict[str, Any]:
+async def analyze_birth(payload: BirthProfileInput, request: Request) -> dict[str, Any]:
     enforce_public_write_rate_limit(request, "birth_analyze")
     profile_id = str(uuid.uuid4())
     time_unknown = payload.birth_time is None
     chart = compute_chart(payload)
     traits = build_trait_profile(chart, time_unknown)
+    signals = derive_personality_signals(chart)
+    questionnaire = await generate_questionnaire(signals)
+    precision = {
+        "level": "reduced" if time_unknown else "standard",
+        "assumed_birth_time": "00:00" if time_unknown else None,
+        "caveat": (
+            "Jam lahir tidak diisi, jadi perhitungan memakai asumsi 00:00. Tambahkan jam yang lebih tepat agar hasil lebih akurat."
+            if time_unknown
+            else None
+        ),
+    }
     profile = {
         "profile_id": profile_id,
         "claim_token": secrets.token_urlsafe(32),
@@ -1827,10 +2542,16 @@ def analyze_birth(payload: BirthProfileInput, request: Request) -> dict[str, Any
         "longitude": payload.longitude,
         "timezone": payload.timezone or "manual-or-utc-pending",
         "time_unknown": time_unknown,
+        "precision": precision,
         "chart": chart,
         "traits": traits,
-        "needs_validation": time_unknown,
-        "validation_questions": validation_questions(payload),
+        "personality_signals": signals,
+        "questionnaire": questionnaire,
+        "needs_validation": True,
+        "validation_questions": [
+            {"id": question["id"], "label": question["prompt"], "type": "rating", "min": 1, "max": 5}
+            for question in questionnaire["questions"]
+        ],
         "roadmap_preview": [],
         "created_at": now_iso(),
     }
@@ -1857,31 +2578,54 @@ def analyze_birth(payload: BirthProfileInput, request: Request) -> dict[str, Any
                 profile["created_at"],
             ),
         )
-    return profile
+    response = questionnaire_question_view(profile, 0)
+    response.update(
+        {
+            "claim_token": profile["claim_token"],
+            "precision": precision,
+            "needs_validation": True,
+        }
+    )
+    return response
+
+
+@app.post("/api/v1/birth/question")
+def get_questionnaire_question(payload: QuestionnaireQuestionInput, request: Request) -> dict[str, Any]:
+    enforce_public_write_rate_limit(request, "birth_question", minute_limit=120, day_limit=1000)
+    profile = load_profile(payload.profile_id)
+    expected_token = str(profile.get("claim_token") or "")
+    if not expected_token or not secrets.compare_digest(payload.claim_token, expected_token):
+        raise HTTPException(status_code=403, detail="Invalid profile claim token")
+    return questionnaire_question_view(profile, payload.index)
 
 
 @app.post("/api/v1/birth/validate")
 def validate_birth(payload: ValidationInput, request: Request) -> dict[str, Any]:
     enforce_public_write_rate_limit(request, "birth_validate")
     profile = load_profile(payload.profile_id)
-    score_boost = 0.16 if payload.answers else 0
+    expected_token = str(profile.get("claim_token") or "")
+    if not expected_token or not secrets.compare_digest(payload.claim_token, expected_token):
+        raise HTTPException(status_code=403, detail="Invalid profile claim token")
+    answers = validate_questionnaire_answers(profile, payload.answers)
+    score_boost = 0.16 if answers else 0
     base_score = float(profile["traits"]["confidence"]["score"])
     new_score = min(base_score + score_boost, 0.88)
     profile["traits"]["confidence"] = {"score": round(new_score, 2), "label": "high" if new_score >= 0.7 else "medium"}
-    profile["validation"] = {"answers": payload.answers, "resolved_at": now_iso()}
+    profile["validation"] = {"answers": answers, "resolved_at": now_iso()}
     profile["needs_validation"] = False
     save_profile(profile)
     return {
         "profile_id": profile["profile_id"],
         "confidence": profile["traits"]["confidence"],
         "ready_for_interpretation": True,
-        "traits": profile["traits"],
+        "precision": profile.get("precision"),
     }
 
 
 @app.get("/api/v1/profiles/{profile_id}")
-def get_profile(profile_id: str) -> dict[str, Any]:
+def get_profile(profile_id: str, request: Request) -> dict[str, Any]:
     profile = load_profile(profile_id)
+    require_profile_owner(profile_id, request)
     return {key: value for key, value in profile.items() if key != "claim_token"}
 
 
@@ -1933,7 +2677,7 @@ def create_public_profile(payload: PublicProfileInput, request: Request) -> dict
             conn.execute(
                 """
                 UPDATE public_profiles
-                SET username = ?, email = ?, display_name = ?, bio = ?, updated_at = ?
+                SET username = ?, email = ?, display_name = ?, bio = ?, avatar_url = COALESCE(?, avatar_url), updated_at = ?
                 WHERE profile_id = ?
                 """,
                 (
@@ -1941,6 +2685,7 @@ def create_public_profile(payload: PublicProfileInput, request: Request) -> dict
                     email,
                     payload.display_name or profile.get("display_name"),
                     payload.bio,
+                    (user or {}).get("picture"),
                     updated_at,
                     payload.profile_id,
                 ),
@@ -1954,8 +2699,8 @@ def create_public_profile(payload: PublicProfileInput, request: Request) -> dict
                 raise HTTPException(status_code=403, detail="Profile claim token or Google-linked ownership is required")
             conn.execute(
                 """
-                INSERT INTO public_profiles (username, profile_id, email, display_name, bio, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO public_profiles (username, profile_id, email, display_name, bio, avatar_url, created_at, updated_at, is_public)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
                 """,
                 (
                     username,
@@ -1963,6 +2708,7 @@ def create_public_profile(payload: PublicProfileInput, request: Request) -> dict
                     email,
                     payload.display_name or profile.get("display_name"),
                     payload.bio,
+                    (user or {}).get("picture"),
                     updated_at,
                     updated_at,
                 ),
@@ -1979,7 +2725,60 @@ def create_public_profile(payload: PublicProfileInput, request: Request) -> dict
             "SELECT * FROM public_profiles WHERE username = ?",
             (username,),
         ).fetchone()
-    return {"status": "ok", "public_profile": public_profile_payload(row)}
+    return {
+        "status": "ok",
+        "public_profile": public_profile_payload(row, viewer_owns_profile(payload.profile_id, request)),
+    }
+
+
+@app.get("/api/v1/user/profile-settings/{profile_id}")
+def get_owner_profile_settings(profile_id: str, request: Request) -> dict[str, Any]:
+    require_linked_profile_owner(profile_id, request)
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM public_profiles WHERE profile_id = ?",
+            (profile_id,),
+        ).fetchone()
+    return {
+        "profile_id": profile_id,
+        "username": row["username"] if row else None,
+        "is_public": bool(row["is_public"]) if row else False,
+        "public_url": f"{public_app_url()}/{row['username']}" if row else None,
+    }
+
+
+@app.patch("/api/v1/user/profile-settings/{profile_id}")
+def update_owner_profile_settings(
+    profile_id: str,
+    payload: OwnerProfileSettingsInput,
+    request: Request,
+) -> dict[str, Any]:
+    require_linked_profile_owner(profile_id, request)
+    username = payload.username.strip().lower()
+    with db() as conn:
+        row = conn.execute(
+            "SELECT username FROM public_profiles WHERE profile_id = ?",
+            (profile_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Public profile has not been created")
+        taken = conn.execute(
+            "SELECT profile_id FROM public_profiles WHERE username = ? AND profile_id != ?",
+            (username, profile_id),
+        ).fetchone()
+        if taken:
+            raise HTTPException(status_code=409, detail="Username already taken")
+        conn.execute(
+            "UPDATE public_profiles SET username = ?, is_public = ?, updated_at = ? WHERE profile_id = ?",
+            (username, int(payload.is_public), now_iso(), profile_id),
+        )
+    return {
+        "status": "ok",
+        "profile_id": profile_id,
+        "username": username,
+        "is_public": payload.is_public,
+        "public_url": f"{public_app_url()}/{username}",
+    }
 
 
 @app.get("/api/v1/public-profiles")
@@ -1989,6 +2788,7 @@ def list_public_profiles(limit: int = 24) -> dict[str, Any]:
         rows = conn.execute(
             """
             SELECT * FROM public_profiles
+            WHERE is_public = 1
             ORDER BY updated_at DESC
             LIMIT ?
             """,
@@ -1998,7 +2798,7 @@ def list_public_profiles(limit: int = 24) -> dict[str, Any]:
 
 
 @app.get("/api/v1/public-profiles/{username}")
-def get_public_profile(username: str) -> dict[str, Any]:
+def get_public_profile(username: str, request: Request) -> dict[str, Any]:
     with db() as conn:
         row = conn.execute(
             "SELECT * FROM public_profiles WHERE username = ?",
@@ -2006,13 +2806,16 @@ def get_public_profile(username: str) -> dict[str, Any]:
         ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Public profile not found")
-    return public_profile_payload(row)
+    owner = viewer_owns_profile(row["profile_id"], request)
+    if not row["is_public"] and not owner:
+        raise HTTPException(status_code=403, detail="Profil ini private")
+    return public_profile_payload(row, owner)
 
 
 @app.get("/api/v1/sky-news")
 def sky_news() -> dict[str, Any]:
     posts = sky_news_rows()
-    return {"updated_at": now_iso(), "disclaimer": "Editorial astrology for reflection, not deterministic prediction.", "posts": posts}
+    return {"updated_at": now_iso(), "disclaimer": "Catatan reflektif, bukan ramalan deterministik.", "posts": posts}
 
 
 @app.get("/api/v1/sky-calendar")
@@ -2091,6 +2894,8 @@ def admin_delete_sky_calendar(payload: AstrologyCalendarDeleteInput, request: Re
 @app.post("/api/v1/interpretation")
 async def interpretation(payload: InterpretationInput, request: Request) -> dict[str, Any]:
     profile = load_profile(payload.profile_id)
+    if profile.get("questionnaire") and not profile.get("validation"):
+        raise HTTPException(status_code=409, detail="Complete the questionnaire before requesting an interpretation")
     entitlement = enforce_ai_rate_limit(request, profile["profile_id"])
     llm_result = await call_llm(
         profile,
@@ -2115,19 +2920,50 @@ async def interpretation(payload: InterpretationInput, request: Request) -> dict
                 now_iso(),
             ),
         )
+    preview = guest_interpretation_view(llm_result["response"])
     return {
         "profile_id": profile["profile_id"],
         "interpretation_id": interpretation_id,
         "provider": llm_result["provider"],
         "model": llm_result["model"],
-        "interpretation": llm_result["response"],
+        "interpretation": preview,
         "confidence": profile["traits"]["confidence"],
+        "requires_google_login": os.getenv("SELF_HOSTED_FULL_ACCESS", "").lower() not in {"1", "true", "yes", "on"},
+    }
+
+
+@app.get("/api/v1/interpretations/{interpretation_id}/full")
+def full_interpretation(interpretation_id: str, request: Request) -> dict[str, Any]:
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT id, profile_id, provider, model, response_json, created_at
+            FROM interpretations
+            WHERE id = ?
+            """,
+            (interpretation_id,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Interpretation not found")
+    require_profile_owner(row["profile_id"], request)
+    profile = load_profile(row["profile_id"])
+    response = normalize_personality_response(json.loads(row["response_json"]), profile)
+    return {
+        "profile_id": row["profile_id"],
+        "interpretation_id": row["id"],
+        "provider": row["provider"],
+        "model": row["model"],
+        "interpretation": response,
+        "chart": profile.get("chart"),
+        "precision": profile.get("precision"),
+        "created_at": row["created_at"],
     }
 
 
 @app.post("/api/v1/interpretation/ask")
 async def ask_interpretation_detail(payload: DetailedQuestionInput, request: Request) -> dict[str, Any]:
     profile = load_profile(payload.profile_id)
+    require_profile_owner(profile["profile_id"], request)
     entitlement = enforce_ai_rate_limit(request, profile["profile_id"])
     llm_result = await call_llm(
         profile,
@@ -2167,12 +3003,26 @@ async def ask_interpretation_detail(payload: DetailedQuestionInput, request: Req
 @app.post("/api/v1/feedback")
 def submit_feedback(payload: FeedbackInput, request: Request) -> dict[str, Any]:
     enforce_public_write_rate_limit(request, "feedback", minute_limit=10, day_limit=100)
+    user_sub = None
+    if payload.source == "accuracy":
+        if not payload.profile_id:
+            raise HTTPException(status_code=422, detail="profile_id is required for accuracy feedback")
+        user = require_linked_profile_owner(payload.profile_id, request)
+        user_sub = str((user or {}).get("sub") or (user or {}).get("email") or "")
+        if payload.interpretation_id:
+            with db() as conn:
+                matches_profile = conn.execute(
+                    "SELECT 1 FROM interpretations WHERE id = ? AND profile_id = ?",
+                    (payload.interpretation_id, payload.profile_id),
+                ).fetchone()
+            if not matches_profile:
+                raise HTTPException(status_code=422, detail="interpretation_id does not belong to profile_id")
     feedback_id = str(uuid.uuid4())
     with db() as conn:
         conn.execute(
             """
-            INSERT INTO feedback (id, profile_id, interpretation_id, rating, message, source, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO feedback (id, profile_id, interpretation_id, rating, message, source, user_sub, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 feedback_id,
@@ -2181,10 +3031,28 @@ def submit_feedback(payload: FeedbackInput, request: Request) -> dict[str, Any]:
                 payload.rating,
                 payload.message,
                 payload.source,
+                user_sub,
                 now_iso(),
             ),
         )
     return {"status": "ok", "feedback_id": feedback_id}
+
+
+@app.get("/api/v1/user/profiles/{profile_id}/feedback/accuracy")
+def get_accuracy_feedback(profile_id: str, request: Request) -> dict[str, Any]:
+    require_linked_profile_owner(profile_id, request)
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT id, interpretation_id, rating, message, created_at
+            FROM feedback
+            WHERE profile_id = ? AND source = 'accuracy'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (profile_id,),
+        ).fetchone()
+    return {"feedback": dict(row) if row else None}
 
 
 @app.get("/admin/login", response_class=HTMLResponse)
@@ -2200,7 +3068,7 @@ async def admin_login(request: Request):
     password_value = form.get("password", [""])[0]
     if not verify_admin_credentials(username_value, password_value):
         return HTMLResponse(login_page("Username atau password salah."), status_code=401)
-    response = RedirectResponse("/admin/dashboard", status_code=303)
+    response = RedirectResponse("/admin/dashboard/overview", status_code=303)
     response.set_cookie(
         ADMIN_COOKIE_NAME,
         admin_session_token(),
@@ -2423,7 +3291,7 @@ async def admin_sky_news_save_form(request: Request) -> RedirectResponse:
         str(form.get("body") or "").strip(),
     )
     if not values[0] or not values[1] or not values[3] or not values[4]:
-        return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
+        return RedirectResponse("/admin/dashboard/news/edit", status_code=303)
     with db() as conn:
         if post_id:
             conn.execute(
@@ -2442,7 +3310,7 @@ async def admin_sky_news_save_form(request: Request) -> RedirectResponse:
                 """,
                 (str(uuid.uuid4()), *values, updated_at, updated_at),
             )
-    return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
+    return RedirectResponse("/admin/dashboard/news", status_code=303)
 
 
 @app.post("/admin/sky-news/delete")
@@ -2453,7 +3321,7 @@ async def admin_sky_news_delete_form(request: Request) -> RedirectResponse:
     if post_id:
         with db() as conn:
             conn.execute("DELETE FROM sky_posts WHERE id = ?", (post_id,))
-    return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
+    return RedirectResponse("/admin/dashboard/news", status_code=303)
 
 
 @app.post("/admin/sky-calendar/save")
@@ -2469,7 +3337,7 @@ async def admin_sky_calendar_save_form(request: Request) -> RedirectResponse:
         str(form.get("summary") or "").strip(),
     )
     if not all(values):
-        return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
+        return RedirectResponse("/admin/dashboard/calendar/edit", status_code=303)
     with db() as conn:
         if event_id:
             conn.execute(
@@ -2488,7 +3356,7 @@ async def admin_sky_calendar_save_form(request: Request) -> RedirectResponse:
                 """,
                 (str(uuid.uuid4()), *values, updated_at, updated_at),
             )
-    return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
+    return RedirectResponse("/admin/dashboard/calendar", status_code=303)
 
 
 @app.post("/admin/sky-calendar/delete")
@@ -2499,7 +3367,7 @@ async def admin_sky_calendar_delete_form(request: Request) -> RedirectResponse:
     if event_id:
         with db() as conn:
             conn.execute("DELETE FROM astrology_calendar WHERE id = ?", (event_id,))
-    return RedirectResponse("/admin/dashboard#sky-news", status_code=303)
+    return RedirectResponse("/admin/dashboard/calendar", status_code=303)
 
 
 def json_script_payload(value: Any) -> str:
@@ -2512,460 +3380,331 @@ def json_script_payload(value: Any) -> str:
     )
 
 
-@app.get("/admin/dashboard", response_class=HTMLResponse)
-def admin_dashboard(request: Request, limit: int = 50) -> str:
-    if not is_admin_request(request):
-        return login_page()
-    data = guest_history(limit=limit, _admin=True)
-    current_prompt = get_setting("llm_system_prompt", os.getenv("LLM_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT))
-    llm_config = public_llm_config()
-    llm_config_json = json_script_payload(llm_config)
-    guest_payload_json = json_script_payload(data["guests"])
-    provider_options = {
-        "openai_compat": "OpenAI-compatible endpoint",
-        "local_fallback": "Local fallback only",
-    }
-    provider_select = "".join(
-        f'<option value="{html.escape(value)}" {"selected" if llm_config["provider"] == value else ""}>{html.escape(label)}</option>'
-        for value, label in provider_options.items()
+ADMIN_DASHBOARD_CSS = """
+:root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #2f2938; background: #f5f2ea; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; }
+a { color: inherit; }
+.admin-app { min-height: 100vh; display: grid; grid-template-columns: 232px minmax(0, 1fr); }
+.sidebar { position: sticky; top: 0; height: 100vh; padding: 24px 16px; background: #30273d; color: #fffdf7; display: flex; flex-direction: column; }
+.brand { display: flex; align-items: center; gap: 10px; margin: 0 8px 28px; font-weight: 900; text-decoration: none; }
+.brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; background: #f5bd6b; color: #30273d; }
+.side-nav { display: grid; gap: 5px; }
+.side-nav a { padding: 10px 12px; border-radius: 11px; color: #d9d1e2; font-weight: 700; text-decoration: none; }
+.side-nav a:hover, .side-nav a.active { color: #30273d; background: #fffdf7; }
+.sidebar small { margin-top: auto; padding: 12px; color: #aaa0b4; }
+.workspace { min-width: 0; }
+.topbar { min-height: 70px; padding: 14px clamp(18px, 4vw, 44px); border-bottom: 1px solid #ddd8cf; background: rgba(255,253,247,.9); display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.topbar strong { font-size: .9rem; }
+.topbar a { color: #635b6f; font-size: .9rem; text-decoration: none; }
+.content { width: min(1120px, 100%); padding: 36px clamp(18px, 4vw, 44px) 60px; }
+.page-head { display: flex; justify-content: space-between; align-items: end; gap: 18px; margin-bottom: 26px; }
+.eyebrow { margin: 0 0 6px; color: #6759db; font-size: .72rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.5rem); letter-spacing: -.055em; line-height: .95; }
+h2 { margin: 0; letter-spacing: -.03em; }
+.muted { color: #736b7c; }
+.button { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 40px; border: 0; border-radius: 10px; padding: 9px 14px; background: #5f54dc; color: white; font: inherit; font-weight: 800; text-decoration: none; cursor: pointer; }
+.button.secondary { border: 1px solid #d7d1c8; background: #fffdf7; color: #30273d; }
+.button.danger { background: #fff0ea; color: #a44327; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 26px; }
+.stat, .panel { border: 1px solid #ded9d1; border-radius: 16px; background: #fffdf7; box-shadow: 0 8px 28px rgba(48,39,61,.05); }
+.stat { padding: 18px; }
+.stat span { color: #736b7c; font-size: .84rem; }
+.stat strong { display: block; margin-top: 7px; font-size: 1.9rem; letter-spacing: -.04em; }
+.panel { margin-bottom: 16px; overflow: hidden; }
+.panel-pad { padding: 20px; }
+.panel-head { padding: 17px 20px; border-bottom: 1px solid #e5e0d8; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 13px 16px; border-bottom: 1px solid #ebe7df; text-align: left; vertical-align: top; }
+th { color: #736b7c; font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; }
+tr:last-child td { border-bottom: 0; }
+.actions { display: flex; justify-content: flex-end; gap: 7px; }
+.actions .button { min-height: 34px; padding: 6px 10px; font-size: .82rem; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+label { display: grid; gap: 7px; color: #453d4d; font-size: .86rem; font-weight: 800; }
+label.wide { grid-column: 1 / -1; }
+input, select, textarea { width: 100%; border: 1px solid #d8d2ca; border-radius: 11px; padding: 11px 12px; background: white; color: #30273d; font: inherit; }
+textarea { min-height: 150px; resize: vertical; line-height: 1.5; }
+.form-actions { display: flex; gap: 10px; margin-top: 18px; }
+.config-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.config-list div { padding: 16px 20px; border-bottom: 1px solid #ebe7df; }
+.config-list div:nth-child(odd) { border-right: 1px solid #ebe7df; }
+.config-list dt { margin-bottom: 5px; color: #736b7c; font-size: .75rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.config-list dd { margin: 0; overflow-wrap: anywhere; font-weight: 750; }
+.config-view-actions { display: flex; gap: 10px; padding: 18px 20px; }
+.feedback { padding: 18px 20px; }
+.feedback + .feedback { border-top: 1px solid #e5e0d8; }
+.feedback-head { display: flex; justify-content: space-between; gap: 12px; }
+.stars { color: #d98c27; letter-spacing: .08em; }
+details.config { border-bottom: 1px solid #e5e0d8; }
+details.config:last-child { border-bottom: 0; }
+details.config > summary { padding: 18px 20px; cursor: pointer; font-weight: 900; list-style-position: inside; }
+details.config > div { padding: 0 20px 20px; }
+pre { max-height: 360px; overflow: auto; white-space: pre-wrap; font: .78rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.toolbar { display: flex; gap: 10px; margin-bottom: 16px; }
+.toolbar input { flex: 1; }
+.mobile-nav { display: none; }
+@media (max-width: 800px) {
+  .admin-app { display: block; }
+  .sidebar { position: static; height: auto; padding: 14px 18px; flex-direction: row; align-items: center; }
+  .brand { margin: 0; }
+  .side-nav, .sidebar small { display: none; }
+  .mobile-nav { display: block; margin-left: auto; width: auto; }
+  .stats, .form-grid { grid-template-columns: 1fr; }
+  .config-list { grid-template-columns: 1fr; }
+  .config-list div:nth-child(odd) { border-right: 0; }
+  label.wide { grid-column: auto; }
+  .page-head, .feedback-head { align-items: start; flex-direction: column; }
+  .topbar { display: none; }
+}
+"""
+
+
+ADMIN_DASHBOARD_NAV = (
+    ("overview", "Ringkasan"),
+    ("feedback", "Feedback"),
+    ("news", "Berita Langit"),
+    ("calendar", "Kalender"),
+    ("activity", "Aktivitas"),
+    ("settings", "Pengaturan"),
+)
+
+
+def admin_dashboard_shell(section: str, title: str, subtitle: str, content: str, script: str = "") -> str:
+    active_section = section.split("/", 1)[0]
+    nav = "".join(
+        f'<a class="{"active" if key == active_section else ""}" href="/admin/dashboard/{key}">{label}</a>'
+        for key, label in ADMIN_DASHBOARD_NAV
     )
-    feedback_rows = admin_feedback_history()
-    sky_rows = sky_news_rows()
-    calendar_rows = astrology_calendar_rows()
-    average_rating = round(sum(row["rating"] for row in feedback_rows) / len(feedback_rows), 2) if feedback_rows else 0
-    cards = []
-    for guest in data["guests"]:
-        latest = guest.get("latest_interpretation")
-        prompt = json.dumps(latest["request_payload"], indent=2) if latest else "No AI prompt yet."
-        response = json.dumps(latest["response"], indent=2) if latest else "No AI response yet."
-        cards.append(
-            f"""
-            <article class="guest-card">
-              <div class="guest-head">
-                <div>
-                  <p class="eyebrow">{html.escape(guest["created_at"])}</p>
-                  <h2>{html.escape(guest["display_name"] or "Anonymous guest")}</h2>
-                </div>
-                <span>{html.escape(guest["birth_place"])}</span>
-              </div>
-              <dl>
-                <div><dt>Birth</dt><dd>{html.escape(guest["birth_date"])} {html.escape(guest["birth_time"] or "")}</dd></div>
-                <div><dt>Coordinates</dt><dd>{guest["latitude"]}, {guest["longitude"]}</dd></div>
-                <div><dt>Timezone</dt><dd>{html.escape(guest["timezone"] or "-")}</dd></div>
-                <div><dt>Dominant</dt><dd>{html.escape((guest.get("traits") or {}).get("dominant_element", "-"))}</dd></div>
-              </dl>
-              <details>
-                <summary>Prompt sent to AI</summary>
-                <pre>{html.escape(prompt)}</pre>
-              </details>
-              <details>
-                <summary>Latest AI response</summary>
-                <pre>{html.escape(response)}</pre>
-              </details>
-            </article>
-            """
-        )
-    sky_cards = []
-    for post in sky_rows:
-        sky_cards.append(
-            f"""
-            <article class="guest-card">
-              <div class="guest-head">
-                <div>
-                  <time>{html.escape(post.get("updated_at") or "")}</time>
-                  <h2>{html.escape(post.get("title") or "")}</h2>
-                </div>
-                <span class="pill">{html.escape(post.get("tag") or "")}</span>
-              </div>
-              <form method="post" action="/admin/sky-news/save" class="stack-form">
-                <input type="hidden" name="id" value="{html.escape(post.get("id") or "")}" />
-                <label>Slug<input name="slug" value="{html.escape(post.get("slug") or "")}" /></label>
-                <label>Title<input name="title" value="{html.escape(post.get("title") or "")}" /></label>
-                <label>Tag<input name="tag" value="{html.escape(post.get("tag") or "")}" /></label>
-                <label>Summary<textarea name="summary">{html.escape(post.get("summary") or "")}</textarea></label>
-                <label>Body<textarea name="body">{html.escape(post.get("body") or "")}</textarea></label>
-                <button type="submit">Save post</button>
-              </form>
-              <form method="post" action="/admin/sky-news/delete">
-                <input type="hidden" name="id" value="{html.escape(post.get("id") or "")}" />
-                <button class="danger" type="submit">Delete post</button>
-              </form>
-            </article>
-            """
-        )
-
-    calendar_cards = []
-    for event in calendar_rows:
-        calendar_cards.append(
-            f"""
-            <article class="guest-card">
-              <div class="guest-head">
-                <div>
-                  <time>{html.escape(event.get("event_date") or "")}</time>
-                  <h2>{html.escape(event.get("title") or "")}</h2>
-                </div>
-                <span class="pill">{html.escape(event.get("tag") or "")}</span>
-              </div>
-              <form method="post" action="/admin/sky-calendar/save" class="stack-form">
-                <input type="hidden" name="id" value="{html.escape(event.get("id") or "")}" />
-                <label>Date<input name="event_date" type="date" value="{html.escape(event.get("event_date") or "")}" /></label>
-                <label>Title<input name="title" value="{html.escape(event.get("title") or "")}" /></label>
-                <label>Tag<input name="tag" value="{html.escape(event.get("tag") or "")}" /></label>
-                <label>Summary<textarea name="summary">{html.escape(event.get("summary") or "")}</textarea></label>
-                <button type="submit">Save event</button>
-              </form>
-              <form method="post" action="/admin/sky-calendar/delete">
-                <input type="hidden" name="id" value="{html.escape(event.get("id") or "")}" />
-                <button class="danger" type="submit">Delete event</button>
-              </form>
-            </article>
-            """
-        )
-
-    feedback_cards = []
-    for item in feedback_rows:
-        stars = "★" * int(item["rating"]) + "☆" * (5 - int(item["rating"]))
-        feedback_cards.append(
-            f"""
-            <article class="guest-card feedback-card">
-              <div class="guest-head">
-                <div>
-                  <p class="eyebrow">{html.escape(item["created_at"])}</p>
-                  <h2>{html.escape(item.get("display_name") or "Anonymous guest")}</h2>
-                </div>
-                <span>{html.escape(stars)}</span>
-              </div>
-              <p>{html.escape(item.get("message") or "No written feedback.")}</p>
-              <small>{html.escape(item.get("birth_place") or "-")} · {html.escape(item.get("source") or "web")}</small>
-            </article>
-            """
-        )
-
+    mobile_options = "".join(
+        f'<option value="{key}" {"selected" if key == active_section else ""}>{label}</option>'
+        for key, label in ADMIN_DASHBOARD_NAV
+    )
     return f"""
     <!doctype html>
-    <html lang="en">
+    <html lang="id">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Hermex Guest Dashboard</title>
-        <style>
-          body {{
-            margin: 0;
-            color: #2f2437;
-            background: #f8f3e7;
-            font-family: Avenir Next, Inter, ui-sans-serif, system-ui, sans-serif;
-          }}
-          main {{ width: min(1120px, calc(100vw - 32px)); margin: 0 auto; padding: 32px 0; }}
-          header {{ display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 20px; }}
-          h1 {{ margin: 0; font-size: clamp(2rem, 5vw, 4rem); letter-spacing: -.06em; line-height: .9; }}
-          .eyebrow {{ margin: 0 0 6px; color: #8e6b45; font-size: .75rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }}
-          .guest-card {{ border: 1px solid rgba(47,36,55,.12); border-radius: 24px; background: #fffdf7; padding: 20px; box-shadow: 0 18px 50px rgba(47,36,55,.08); margin-bottom: 16px; }}
-          .prompt-editor, .provider-editor {{ border: 1px solid rgba(47,36,55,.12); border-radius: 24px; background: #fffdf7; padding: 20px; box-shadow: 0 18px 50px rgba(47,36,55,.08); margin-bottom: 16px; }}
-          textarea {{ width: 100%; min-height: 220px; border: 1px solid rgba(47,36,55,.16); border-radius: 16px; padding: 14px; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }}
-          input, select {{ width: 100%; box-sizing: border-box; border: 1px solid rgba(47,36,55,.16); border-radius: 14px; padding: 12px; background: #fffdf7; color: #2f2437; font: inherit; }}
-          label {{ display: grid; gap: 7px; font-weight: 800; }}
-          button {{ border: 0; border-radius: 999px; margin-top: 10px; padding: 10px 16px; background: #2f2437; color: #fff8df; font-weight: 800; cursor: pointer; }}
-          code {{ border-radius: 6px; background: #f8f3e7; padding: 2px 6px; }}
-          #saveStatus, #providerStatus {{ margin-left: 10px; font-weight: 800; color: #5f7f60; }}
-          .control-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }}
-          .inline-actions {{ display: flex; gap: 10px; align-items: end; }}
-          .inline-actions label {{ flex: 1; }}
-          .inline-actions button {{ width: auto; white-space: nowrap; }}
-          .hint {{ color: #806d83; font-size: .88rem; }}
-          .admin-menu {{ display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; }}
-          .admin-menu button {{ width: auto; margin: 0; background: #fffdf7; color: #2f2437; border: 1px solid rgba(47,36,55,.12); }}
-          .admin-menu button.active {{ background: #2f2437; color: #fff8df; }}
-          .dashboard-panel {{ display: none; }}
-          .dashboard-panel.active {{ display: block; }}
-          .overview-grid {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }}
-          .stat-card {{ border-radius: 20px; background: #fffdf7; padding: 18px; border: 1px solid rgba(47,36,55,.12); box-shadow: 0 14px 40px rgba(47,36,55,.07); }}
-          .stat-card strong {{ display: block; font-size: 2rem; letter-spacing: -.04em; }}
-          .admin-toolbar {{ display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }}
-          .admin-toolbar input {{ flex: 1; }}
-          .admin-toolbar button {{ margin: 0; white-space: nowrap; }}
-          .feedback-card p {{ font-size: 1rem; line-height: 1.55; }}
-          .stack-form {{ display: grid; gap: 12px; margin-top: 12px; }}
-          .stack-form label {{ display: grid; gap: 6px; font-weight: 900; }}
-          .stack-form input, .stack-form textarea {{ width: 100%; border: 1px solid rgba(47,36,55,.16); border-radius: 16px; padding: 12px; background: rgba(255,255,255,.62); color: #20385e; font: inherit; box-sizing: border-box; }}
-          .stack-form textarea {{ min-height: 92px; resize: vertical; }}
-          .danger {{ margin-top: 10px; background: #f09d73; color: #2f2437; }}
-          .guest-head {{ display: flex; justify-content: space-between; gap: 14px; align-items: start; }}
-          h2 {{ margin: 0; }}
-          .guest-head span {{ border-radius: 999px; background: #e6f5ef; padding: 8px 12px; font-weight: 800; }}
-          dl {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }}
-          dt {{ color: #806d83; font-size: .74rem; font-weight: 800; text-transform: uppercase; }}
-          dd {{ margin: 4px 0 0; font-weight: 700; }}
-          details {{ margin-top: 10px; border-radius: 16px; background: #f8f3e7; padding: 12px; }}
-          summary {{ cursor: pointer; font-weight: 900; }}
-          pre {{ white-space: pre-wrap; overflow: auto; font-size: .82rem; line-height: 1.45; }}
-          @media (max-width: 760px) {{ header, .guest-head, .inline-actions {{ display: block; }} dl, .control-grid, .overview-grid {{ grid-template-columns: 1fr; }} }}
-        </style>
+        <title>{html.escape(title)} · Hermex Admin</title>
+        <style>{ADMIN_DASHBOARD_CSS}</style>
       </head>
       <body>
-        <main>
-          <header>
-            <div>
-              <p class="eyebrow">Local backend dashboard</p>
-              <h1>Hermex guest history</h1>
-            </div>
-            <p>{len(data["guests"])} guest records</p>
-          </header>
-          <nav class="admin-menu" aria-label="Admin menu">
-            <button class="active" data-target="overview" type="button">Overview</button>
-            <button data-target="provider" type="button">Provider</button>
-            <button data-target="prompt" type="button">Setting prompt</button>
-            <button data-target="feedback" type="button">Feedback</button>
-            <button data-target="sky-news" type="button">Berita Langit</button>
-            <button data-target="logs" type="button">Log</button>
-          </nav>
-          <section class="dashboard-panel active" data-panel="overview">
-            <div class="overview-grid">
-              <article class="stat-card"><span>Guest records</span><strong>{len(data["guests"])}</strong></article>
-              <article class="stat-card"><span>Feedback</span><strong>{len(feedback_rows)}</strong></article>
-              <article class="stat-card"><span>Average rating</span><strong>{average_rating}</strong></article>
-              <article class="stat-card"><span>AI provider</span><strong>{html.escape(llm_config["provider"])}</strong></article>
-              <article class="stat-card"><span>AI / minute</span><strong>{llm_config["requests_per_minute"]}</strong></article>
-              <article class="stat-card"><span>AI / day</span><strong>{llm_config["requests_per_day"]}</strong></article>
-            </div>
-          </section>
-          <section class="dashboard-panel" data-panel="prompt">
-          <div class="prompt-editor">
-            <p class="eyebrow">Hermes AI prompt</p>
-            <h2>Editable system prompt</h2>
-            <p>Use <code>{{language}}</code> where the active UI language should be inserted.</p>
-            <textarea id="prompt">{html.escape(current_prompt)}</textarea>
-            <button id="savePrompt">Save prompt</button>
-            <span id="saveStatus"></span>
+        <div class="admin-app">
+          <aside class="sidebar">
+            <a class="brand" href="/admin/dashboard/overview"><span class="brand-mark">✦</span> Hermex Admin</a>
+            <nav class="side-nav" aria-label="Navigasi admin">{nav}</nav>
+            <select class="mobile-nav" aria-label="Buka halaman admin" onchange="location.href='/admin/dashboard/'+this.value">{mobile_options}</select>
+            <small>Panel internal Hermex</small>
+          </aside>
+          <div class="workspace">
+            <header class="topbar"><strong>hermex.fun / admin</strong><a href="/">Lihat situs ↗</a></header>
+            <main class="content">
+              <header class="page-head">
+                <div><p class="eyebrow">Dashboard</p><h1>{html.escape(title)}</h1><p class="muted">{html.escape(subtitle)}</p></div>
+              </header>
+              {content}
+            </main>
           </div>
-          </section>
-          <section class="dashboard-panel" data-panel="provider">
-          <div class="provider-editor">
-            <p class="eyebrow">Hermes AI provider</p>
-            <h2>Provider, endpoint, API key, and model</h2>
-            <p class="hint">Use an OpenAI-compatible endpoint. API keys are saved only in local SQLite settings and are never printed back here.</p>
-            <div class="control-grid">
-              <label>Provider
-                <select id="provider">{provider_select}</select>
-              </label>
-              <label>Base URL
-                <input id="baseUrl" value="{html.escape(llm_config["base_url"])}" placeholder="https://api.openai.com/v1" />
-              </label>
-              <label>API key
-                <input id="apiKey" type="password" placeholder="{'Saved key active - leave blank to keep it' if llm_config["has_api_key"] else 'Paste API key'}" />
-              </label>
-              <label>Temperature
-                <input id="temperature" type="number" min="0" max="2" step="0.1" value="{llm_config["temperature"]}" />
-              </label>
-              <label>Max tokens
-                <input id="maxTokens" type="number" min="128" max="4000" step="1" value="{llm_config["max_tokens"]}" />
-              </label>
-              <label>Requests / minute
-                <input id="requestsPerMinute" type="number" min="1" max="300" step="1" value="{llm_config["requests_per_minute"]}" />
-              </label>
-              <label>Requests / day
-                <input id="requestsPerDay" type="number" min="1" max="10000" step="1" value="{llm_config["requests_per_day"]}" />
-              </label>
-            </div>
-            <div class="inline-actions">
-              <label>Model
-                <select id="modelSelect"><option value="{html.escape(llm_config["model"])}">{html.escape(llm_config["model"])}</option></select>
-              </label>
-              <button id="syncModels" type="button">Sync models</button>
-            </div>
-            <button id="saveProvider">Save AI provider</button>
-            <span id="providerStatus"></span>
-          </div>
-          </section>
-          <section class="dashboard-panel" data-panel="sky-news">
-            <article class="guest-card">
-              <h2>Add Astrology Calendar event</h2>
-              <form method="post" action="/admin/sky-calendar/save" class="stack-form">
-                <label>Date<input name="event_date" type="date" /></label>
-                <label>Title<input name="title" placeholder="Venus enters Cancer" /></label>
-                <label>Tag<input name="tag" placeholder="Transit" /></label>
-                <label>Summary<textarea name="summary" placeholder="Dampak reflektif singkat untuk pembaca."></textarea></label>
-                <button type="submit">Add calendar event</button>
-              </form>
-            </article>
-            <h2>Astrology Calendar</h2>
-            {''.join(calendar_cards) or '<p>No astrology calendar events yet.</p>'}
-            <article class="guest-card">
-              <h2>Add Berita Langit post</h2>
-              <form method="post" action="/admin/sky-news/save" class="stack-form">
-                <label>Slug<input name="slug" placeholder="merkurius-dan-komunikasi" /></label>
-                <label>Title<input name="title" placeholder="Merkurius dan cuaca komunikasi" /></label>
-                <label>Tag<input name="tag" placeholder="Mercury" /></label>
-                <label>Summary<textarea name="summary" placeholder="Ringkasan pendek untuk kartu blog."></textarea></label>
-                <label>Body<textarea name="body" placeholder="Isi artikel sederhana."></textarea></label>
-                <button type="submit">Add post</button>
-              </form>
-            </article>
-            {''.join(sky_cards) or '<p>No sky posts yet.</p>'}
-          </section>
-
-          <section class="dashboard-panel" data-panel="feedback">
-            {''.join(feedback_cards) or '<p>No feedback yet.</p>'}
-          </section>
-          <section class="dashboard-panel" data-panel="logs">
-            <div class="admin-toolbar">
-              <input id="logSearch" placeholder="Search guest, city, provider, model..." />
-              <button id="exportGuests" type="button">Export JSON</button>
-            </div>
-            {''.join(cards) or '<p>No guests yet.</p>'}
-          </section>
-        </main>
-        <script id="llm-config-data" type="application/json">{llm_config_json}</script>
-        <script id="guest-data" type="application/json">{guest_payload_json}</script>
-        <script>
-          document.querySelectorAll('.admin-menu button').forEach((button) => {{
-            button.addEventListener('click', () => {{
-              document.querySelectorAll('.admin-menu button').forEach((item) => item.classList.remove('active'));
-              document.querySelectorAll('.dashboard-panel').forEach((panel) => panel.classList.remove('active'));
-              button.classList.add('active');
-              document.querySelector(`[data-panel="${{button.dataset.target}}"]`).classList.add('active');
-            }});
-          }});
-
-          const initialConfig = JSON.parse(document.getElementById('llm-config-data').textContent || '{{}}');
-          const provider = document.getElementById('provider');
-          const baseUrl = document.getElementById('baseUrl');
-          const apiKey = document.getElementById('apiKey');
-          const modelSelect = document.getElementById('modelSelect');
-          const temperature = document.getElementById('temperature');
-          const maxTokens = document.getElementById('maxTokens');
-          const requestsPerMinute = document.getElementById('requestsPerMinute');
-          const requestsPerDay = document.getElementById('requestsPerDay');
-          const providerStatus = document.getElementById('providerStatus');
-          const guestPayload = JSON.parse(document.getElementById('guest-data').textContent || '[]');
-
-          function setModels(models, selected) {{
-            const unique = Array.from(new Set([selected, ...models].filter(Boolean)));
-            while (modelSelect.firstChild) modelSelect.removeChild(modelSelect.firstChild);
-            unique.forEach((model) => {{
-              const option = document.createElement('option');
-              option.value = String(model);
-              option.textContent = String(model);
-              modelSelect.appendChild(option);
-            }});
-            modelSelect.value = selected || unique[0] || '';
-          }}
-          setModels([], initialConfig.model);
-
-          document.getElementById('syncModels').addEventListener('click', async () => {{
-            providerStatus.textContent = 'Syncing models...';
-            const response = await fetch('/api/v1/admin/llm-models', {{
-              method: 'POST',
-              headers: {{ 'Content-Type': 'application/json' }},
-              body: JSON.stringify({{ base_url: baseUrl.value, api_key: apiKey.value }})
-            }});
-            if (!response.ok) {{
-              providerStatus.textContent = await response.text();
-              return;
-            }}
-            const data = await response.json();
-            setModels(data.models || [], modelSelect.value);
-            providerStatus.textContent = `Synced ${{(data.models || []).length}} models`;
-          }});
-
-          document.getElementById('saveProvider').addEventListener('click', async () => {{
-            providerStatus.textContent = 'Saving provider...';
-            const response = await fetch('/api/v1/admin/llm-config', {{
-              method: 'POST',
-              headers: {{ 'Content-Type': 'application/json' }},
-              body: JSON.stringify({{
-                provider: provider.value,
-                base_url: baseUrl.value,
-                api_key: apiKey.value,
-                model: modelSelect.value,
-                temperature: Number(temperature.value),
-                max_tokens: Number(maxTokens.value),
-                requests_per_minute: Number(requestsPerMinute.value),
-                requests_per_day: Number(requestsPerDay.value)
-              }})
-            }});
-            providerStatus.textContent = response.ok ? 'Provider saved' : await response.text();
-            if (response.ok) apiKey.value = '';
-          }});
-
-          document.getElementById('savePrompt').addEventListener('click', async () => {{
-            const prompt = document.getElementById('prompt').value;
-            const status = document.getElementById('saveStatus');
-            status.textContent = 'Saving...';
-            const response = await fetch('/api/v1/admin/prompt', {{
-              method: 'POST',
-              headers: {{ 'Content-Type': 'application/json' }},
-              body: JSON.stringify({{ prompt }})
-            }});
-            status.textContent = response.ok ? 'Saved' : await response.text();
-          }});
-
-          document.getElementById('logSearch')?.addEventListener('input', (event) => {{
-            const query = event.target.value.toLowerCase();
-            document.querySelectorAll('[data-panel="logs"] .guest-card').forEach((card) => {{
-              card.style.display = card.textContent.toLowerCase().includes(query) ? '' : 'none';
-            }});
-          }});
-
-          document.getElementById('exportGuests')?.addEventListener('click', () => {{
-            const blob = new Blob([JSON.stringify(guestPayload, null, 2)], {{ type: 'application/json' }});
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `hermex-guests-${{new Date().toISOString().slice(0, 10)}}.json`;
-            link.click();
-            URL.revokeObjectURL(url);
-          }});
-        </script>
+        </div>
+        {script}
       </body>
     </html>
     """
 
 
-@app.post("/api/v1/quests/start")
-def start_quest(payload: QuestStartInput, request: Request) -> dict[str, Any]:
-    enforce_public_write_rate_limit(request, "quest_start")
-    load_profile(payload.profile_id)
-    quest_id = str(uuid.uuid4())
-    quest = {
-        "quest_id": quest_id,
-        "profile_id": payload.profile_id,
-        "quest_slug": payload.quest_slug,
-        "status": "started",
-        "score": 0,
-    }
-    with db() as conn:
-        conn.execute(
+def admin_activity_cards(guests: list[dict[str, Any]]) -> str:
+    cards = []
+    for guest in guests:
+        latest = guest.get("latest_interpretation")
+        prompt = json.dumps(latest["request_payload"], indent=2, ensure_ascii=False) if latest else "Belum ada prompt AI."
+        response = json.dumps(latest["response"], indent=2, ensure_ascii=False) if latest else "Belum ada respons AI."
+        cards.append(
+            f"""
+            <article class="panel activity-card" data-search="{html.escape(' '.join(str(value or '') for value in (guest.get('display_name'), guest.get('birth_place'), latest.get('provider') if latest else '', latest.get('model') if latest else '')))}">
+              <div class="panel-head"><div><strong>{html.escape(guest.get('display_name') or 'Tamu')}</strong><div class="muted">{html.escape(guest.get('birth_place') or '-')} · {html.escape(guest.get('created_at') or '')}</div></div><span>{html.escape(guest.get('birth_date') or '')}</span></div>
+              <div class="panel-pad"><details><summary>Data permintaan AI</summary><pre>{html.escape(prompt)}</pre></details><details><summary>Respons terakhir</summary><pre>{html.escape(response)}</pre></details></div>
+            </article>
             """
-            INSERT INTO user_quests (id, profile_id, quest_slug, status, score, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (quest_id, payload.profile_id, payload.quest_slug, "started", 0, now_iso()),
         )
-    return quest
+    return "".join(cards) or '<div class="panel panel-pad">Belum ada aktivitas.</div>'
 
 
-@app.post("/api/v1/quests/complete")
-def complete_quest(payload: QuestCompleteInput, request: Request) -> dict[str, Any]:
-    enforce_public_write_rate_limit(request, "quest_complete")
-    score = min(100, max(10, len(json.dumps(payload.result_payload)) // 3))
-    with db() as conn:
-        row = conn.execute("SELECT profile_id, quest_slug FROM user_quests WHERE id = ?", (payload.quest_id,)).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Quest not found")
-        conn.execute(
-            """
-            UPDATE user_quests
-            SET status = ?, score = ?, result_json = ?, completed_at = ?
-            WHERE id = ?
-            """,
-            ("completed", score, json.dumps(payload.result_payload), now_iso(), payload.quest_id),
+@app.get("/admin/dashboard", include_in_schema=False)
+def admin_dashboard_redirect(request: Request) -> RedirectResponse:
+    if not is_admin_request(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    return RedirectResponse("/admin/dashboard/overview", status_code=303)
+
+
+@app.get("/admin/dashboard/{section:path}", response_class=HTMLResponse, include_in_schema=False)
+def admin_dashboard_page(request: Request, section: str, id: str = "", limit: int = 50, mode: str = "view") -> str:
+    if not is_admin_request(request):
+        return login_page()
+
+    allowed = {"overview", "feedback", "news", "news/edit", "calendar", "calendar/edit", "activity", "settings"}
+    if section not in allowed:
+        raise HTTPException(status_code=404, detail="Admin page not found")
+
+    if section == "overview":
+        guests = guest_history(limit=min(max(limit, 1), 50), _admin=True)["guests"]
+        feedback_rows = admin_feedback_history()
+        average_rating = round(sum(row["rating"] for row in feedback_rows) / len(feedback_rows), 1) if feedback_rows else 0
+        config = public_llm_config()
+        recent = "".join(
+            f'<tr><td>{html.escape(item.get("display_name") or "Tamu")}</td><td>{html.escape(item.get("birth_place") or "-")}</td><td>{html.escape(item.get("created_at") or "")}</td></tr>'
+            for item in guests[:6]
+        ) or '<tr><td colspan="3">Belum ada aktivitas.</td></tr>'
+        content = f"""
+        <section class="stats">
+          <article class="stat"><span>Analisis terbaru</span><strong>{len(guests)}</strong></article>
+          <article class="stat"><span>Feedback</span><strong>{len(feedback_rows)}</strong></article>
+          <article class="stat"><span>Rating rata-rata</span><strong>{average_rating or '-'}</strong></article>
+          <article class="stat"><span>Model aktif</span><strong>{html.escape(config['model'])}</strong></article>
+        </section>
+        <section class="panel"><div class="panel-head"><h2>Aktivitas terbaru</h2><a class="button secondary" href="/admin/dashboard/activity">Lihat semua</a></div><div class="table-wrap"><table><thead><tr><th>Nama</th><th>Lokasi lahir</th><th>Waktu</th></tr></thead><tbody>{recent}</tbody></table></div></section>
+        """
+        return admin_dashboard_shell(section, "Ringkasan", "Angka penting dan aktivitas terbaru.", content)
+
+    if section == "feedback":
+        rows = admin_feedback_history()
+        cards = "".join(
+            f'<article class="feedback"><div class="feedback-head"><div><strong>{html.escape(row.get("display_name") or "Tamu")}</strong><div class="muted">{html.escape(row.get("birth_place") or "-")} · {html.escape(row.get("created_at") or "")}</div></div><span class="stars">{"★" * int(row["rating"])}{"☆" * (5 - int(row["rating"]))}</span></div><p>{html.escape(row.get("message") or "Tanpa catatan tambahan.")}</p></article>'
+            for row in rows
+        ) or '<div class="panel-pad">Belum ada feedback.</div>'
+        return admin_dashboard_shell(section, "Feedback", "Ulasan akurasi dari pengguna.", f'<section class="panel">{cards}</section>')
+
+    if section == "news":
+        rows = sky_news_rows()
+        table_rows = "".join(
+            f'<tr><td><strong>{html.escape(row.get("title") or "")}</strong><div class="muted">/{html.escape(row.get("slug") or "")}</div></td><td>{html.escape(row.get("tag") or "-")}</td><td>{html.escape(row.get("updated_at") or "")}</td><td><div class="actions"><a class="button secondary" href="/admin/dashboard/news/edit?id={urllib.parse.quote(row.get("id") or "")}">Edit</a><form method="post" action="/admin/sky-news/delete" onsubmit="return confirm(\'Hapus artikel ini?\')"><input type="hidden" name="id" value="{html.escape(row.get("id") or "")}"/><button class="button danger" type="submit">Hapus</button></form></div></td></tr>'
+            for row in rows
+        ) or '<tr><td colspan="4">Belum ada artikel.</td></tr>'
+        content = f'<section class="panel"><div class="panel-head"><h2>Semua artikel</h2><a class="button" href="/admin/dashboard/news/edit">+ Artikel baru</a></div><div class="table-wrap"><table><thead><tr><th>Artikel</th><th>Tag</th><th>Diperbarui</th><th></th></tr></thead><tbody>{table_rows}</tbody></table></div></section>'
+        return admin_dashboard_shell(section, "Berita Langit", "Kelola daftar artikel tanpa form panjang di halaman ini.", content)
+
+    if section == "news/edit":
+        item = next((row for row in sky_news_rows() if row.get("id") == id), {})
+        content = f"""
+        <section class="panel panel-pad"><form method="post" action="/admin/sky-news/save">
+          <input type="hidden" name="id" value="{html.escape(item.get('id') or '')}" />
+          <div class="form-grid">
+            <label>Slug<input name="slug" required value="{html.escape(item.get('slug') or '')}" placeholder="judul-artikel" /></label>
+            <label>Tag<input name="tag" value="{html.escape(item.get('tag') or '')}" placeholder="Mars–Jupiter" /></label>
+            <label class="wide">Judul<input name="title" required value="{html.escape(item.get('title') or '')}" /></label>
+            <label class="wide">Ringkasan<textarea name="summary" required>{html.escape(item.get('summary') or '')}</textarea></label>
+            <label class="wide">Isi artikel<textarea name="body" required style="min-height:360px">{html.escape(item.get('body') or '')}</textarea></label>
+          </div><div class="form-actions"><button class="button" type="submit">Simpan artikel</button><a class="button secondary" href="/admin/dashboard/news">Batal</a></div>
+        </form></section>
+        """
+        return admin_dashboard_shell("news", "Edit artikel" if item else "Artikel baru", "Satu halaman khusus untuk satu artikel.", content)
+
+    if section == "calendar":
+        rows = astrology_calendar_rows()
+        table_rows = "".join(
+            f'<tr><td>{html.escape(row.get("event_date") or "")}</td><td><strong>{html.escape(row.get("title") or "")}</strong><div class="muted">{html.escape(row.get("summary") or "")}</div></td><td>{html.escape(row.get("tag") or "-")}</td><td><div class="actions"><a class="button secondary" href="/admin/dashboard/calendar/edit?id={urllib.parse.quote(row.get("id") or "")}">Edit</a><form method="post" action="/admin/sky-calendar/delete" onsubmit="return confirm(\'Hapus agenda ini?\')"><input type="hidden" name="id" value="{html.escape(row.get("id") or "")}"/><button class="button danger" type="submit">Hapus</button></form></div></td></tr>'
+            for row in rows
+        ) or '<tr><td colspan="4">Belum ada agenda.</td></tr>'
+        content = f'<section class="panel"><div class="panel-head"><h2>Semua agenda</h2><a class="button" href="/admin/dashboard/calendar/edit">+ Agenda baru</a></div><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Agenda</th><th>Tag</th><th></th></tr></thead><tbody>{table_rows}</tbody></table></div></section>'
+        return admin_dashboard_shell(section, "Kalender Langit", "Atur agenda bulanan dari halaman terpisah.", content)
+
+    if section == "calendar/edit":
+        item = next((row for row in astrology_calendar_rows() if row.get("id") == id), {})
+        content = f"""
+        <section class="panel panel-pad"><form method="post" action="/admin/sky-calendar/save">
+          <input type="hidden" name="id" value="{html.escape(item.get('id') or '')}" />
+          <div class="form-grid">
+            <label>Tanggal<input name="event_date" type="date" required value="{html.escape(item.get('event_date') or '')}" /></label>
+            <label>Tag<input name="tag" required value="{html.escape(item.get('tag') or '')}" /></label>
+            <label class="wide">Judul<input name="title" required value="{html.escape(item.get('title') or '')}" /></label>
+            <label class="wide">Ringkasan<textarea name="summary" required>{html.escape(item.get('summary') or '')}</textarea></label>
+          </div><div class="form-actions"><button class="button" type="submit">Simpan agenda</button><a class="button secondary" href="/admin/dashboard/calendar">Batal</a></div>
+        </form></section>
+        """
+        return admin_dashboard_shell("calendar", "Edit agenda" if item else "Agenda baru", "Satu halaman khusus untuk satu agenda.", content)
+
+    if section == "activity":
+        guests = guest_history(limit=min(max(limit, 1), 200), _admin=True)["guests"]
+        payload = json_script_payload(guests)
+        content = f'<div class="toolbar"><input id="activity-search" placeholder="Cari nama, lokasi, provider, atau model"/><button class="button secondary" id="export-guests" type="button">Unduh JSON</button></div>{admin_activity_cards(guests)}'
+        script = f"""<script id="guest-data" type="application/json">{payload}</script><script>
+        document.getElementById('activity-search').addEventListener('input', (event) => {{ const query = event.target.value.toLowerCase(); document.querySelectorAll('.activity-card').forEach((card) => card.hidden = !card.dataset.search.toLowerCase().includes(query)); }});
+        document.getElementById('export-guests').addEventListener('click', () => {{ const blob = new Blob([JSON.stringify(JSON.parse(document.getElementById('guest-data').textContent), null, 2)], {{type:'application/json'}}); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href=url; link.download=`hermex-activity-${{new Date().toISOString().slice(0,10)}}.json`; link.click(); URL.revokeObjectURL(url); }});
+        </script>"""
+        return admin_dashboard_shell(section, "Aktivitas", "Riwayat analisis dan keluaran AI.", content, script)
+
+    private_config = get_llm_config()
+    config = public_llm_config(private_config)
+    current_prompt = get_setting("llm_system_prompt", os.getenv("LLM_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT))
+    if mode != "edit":
+        values = (
+            ("Provider", "OpenAI-compatible" if config["provider"] == "openai_compat" else "Local fallback"),
+            ("Base URL", config["base_url"] or "Belum disetel"),
+            ("API key", masked_secret_label(private_config["api_key"])),
+            ("Model", config["model"]),
+            ("Temperature", str(config["temperature"])),
+            ("Token maksimum", str(config["max_tokens"])),
+            ("Permintaan / menit", str(config["requests_per_minute"])),
+            ("Permintaan / hari", str(config["requests_per_day"])),
         )
-    return {
-        "quest_id": payload.quest_id,
-        "status": "completed",
-        "reward": {"score": score, "badge": "first-reflection"},
-        "next_suggestion": "Start the 30-day roadmap experiment.",
-    }
+        config_rows = "".join(
+            f"<div><dt>{html.escape(label)}</dt><dd>{html.escape(value)}</dd></div>"
+            for label, value in values
+        )
+        content = f"""
+        <section class="panel">
+          <div class="panel-head"><h2>Koneksi model</h2><span class="muted">Mode lihat</span></div>
+          <dl class="config-list">{config_rows}</dl>
+          <div class="config-view-actions"><a class="button" href="/admin/dashboard/settings?mode=edit">Edit pengaturan</a></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Prompt sistem</h2><span class="muted">Instruksi analisis AI</span></div>
+          <div class="panel-pad"><pre>{html.escape(current_prompt)}</pre></div>
+        </section>
+        """
+        return admin_dashboard_shell(section, "Pengaturan", "Lihat konfigurasi aktif. Masuk mode edit hanya saat perlu mengubahnya.", content)
+
+    provider_options = "".join(
+        f'<option value="{key}" {"selected" if config["provider"] == key else ""}>{label}</option>'
+        for key, label in (("openai_compat", "OpenAI-compatible"), ("local_fallback", "Local fallback"))
+    )
+    content = f"""
+    <section class="panel">
+      <div class="panel-head"><h2>Edit koneksi model</h2><span class="muted">API key tersimpan tidak pernah ditampilkan</span></div><div class="panel-pad">
+        <div class="form-grid">
+          <label>Provider<select id="provider">{provider_options}</select></label><label>Base URL<input id="base-url" value="{html.escape(config['base_url'])}" /></label>
+          <label>API key<input id="api-key" type="password" value="" autocomplete="new-password" placeholder="{'Kosongkan untuk mempertahankan API key' if config['has_api_key'] else 'Tempel API key'}" /></label>
+          <label>Model<input id="model" value="{html.escape(config['model'])}" /></label>
+          <label>Temperature<input id="temperature" type="number" min="0" max="2" step="0.1" value="{config['temperature']}" /></label>
+          <label>Token maksimum<input id="max-tokens" type="number" min="128" max="8000" value="{config['max_tokens']}" /></label>
+          <label>Permintaan / menit<input id="rpm" type="number" min="1" max="300" value="{config['requests_per_minute']}" /></label>
+          <label>Permintaan / hari<input id="rpd" type="number" min="1" max="10000" value="{config['requests_per_day']}" /></label>
+        </div><div class="form-actions"><button class="button" id="save-provider" type="button">Simpan koneksi</button><button class="button secondary" id="sync-models" type="button">Cek model</button><a class="button secondary" href="/admin/dashboard/settings">Batal</a><span id="provider-status"></span></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Edit prompt sistem</h2><span class="muted">Instruksi analisis AI</span></div>
+      <div class="panel-pad"><label>Prompt<textarea id="prompt" style="min-height:360px">{html.escape(current_prompt)}</textarea></label><div class="form-actions"><button class="button" id="save-prompt" type="button">Simpan prompt</button><span id="prompt-status"></span></div></div>
+    </section>
+    """
+    script = """<script>
+    const value = (id) => document.getElementById(id).value;
+    document.getElementById('save-provider').addEventListener('click', async () => {
+      const status = document.getElementById('provider-status'); status.textContent = 'Menyimpan…';
+      const response = await fetch('/api/v1/admin/llm-config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({provider:value('provider'), base_url:value('base-url'), api_key:value('api-key'), model:value('model'), temperature:Number(value('temperature')), max_tokens:Number(value('max-tokens')), requests_per_minute:Number(value('rpm')), requests_per_day:Number(value('rpd'))})});
+      status.textContent = response.ok ? 'Tersimpan' : await response.text(); if (response.ok) location.href='/admin/dashboard/settings';
+    });
+    document.getElementById('sync-models').addEventListener('click', async () => {
+      const status = document.getElementById('provider-status'); status.textContent = 'Memeriksa…';
+      const response = await fetch('/api/v1/admin/llm-models', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({base_url:value('base-url'), api_key:value('api-key')})});
+      if (!response.ok) { status.textContent=await response.text(); return; } const data=await response.json(); status.textContent=`${(data.models||[]).length} model tersedia`;
+    });
+    document.getElementById('save-prompt').addEventListener('click', async () => {
+      const status=document.getElementById('prompt-status'); status.textContent='Menyimpan…'; const response=await fetch('/api/v1/admin/prompt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:value('prompt')})}); status.textContent=response.ok?'Tersimpan':await response.text();
+    });
+    </script>"""
+    return admin_dashboard_shell(section, "Edit pengaturan", "Ubah hanya nilai yang diperlukan. API key kosong berarti tetap memakai key tersimpan.", content, script)
 
 
 @app.get("/api/v1/roadmap/{profile_id}")

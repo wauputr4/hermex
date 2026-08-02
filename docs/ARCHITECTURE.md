@@ -5,26 +5,29 @@
 Hermex is organized into two main services:
 
 - **Frontend (SvelteKit + SVG/CSS interaction)**
-  - Handles birth form, profile summary screens, astrology education, and installable-app style UI.
-  - Manages local UI state, guest draft/history storage, guest XP/badges, PWA install prompt, offline mode, and backend API calls.
+  - Handles the focused birth form, rating questionnaire, guest preview, authenticated character card, natal detail, and astrology education.
+  - Stores only the pending profile claim, questionnaire answers, editable username, and interpretation id needed to resume Google OAuth.
 - **Backend (FastAPI + SQLite)**
-  - Handles data validation, astrology computation, questionnaire scoring, and LLM orchestration.
-  - Stores profiles, sessions, quests, feedback, admin settings, and interpretation history.
+  - Handles data validation, natal calculation, personality-signal derivation, questionnaire validation, Google ownership, and LLM orchestration.
+  - Stores profiles, account links, feedback, admin settings, and interpretation history.
 
 ## 2) Main data flow
 
 ```text
-User submits birth input (name optional)
+User submits birth date, optional time, and selected city
   -> FE calls POST /api/v1/birth/analyze
-  -> API validates required fields (place + birth date, time optional)
   -> City picker provides latitude, longitude, and timezone
-  -> Natal chart calculation (pyswisseph + Placidus houses when possible)
-  -> Profile derivation (traits + aptitude + risk/uncertainty)
-  -> Returns validation questionnaire when needed
-  -> User submits questionnaire answers
-  -> Backend merges validation signals
-  -> Backend requests interpretation from configured LLM endpoint
-  -> FE renders chart, insight cards, education cards, roadmap, and feedback UI
+  -> Natal chart calculation uses the supplied time or a disclosed 00:00 fallback
+  -> Backend derives 10 internal personality signals
+  -> Configured AI creates 10 plain-language rating questions in the backend
+     (local/test can use a deterministic fallback)
+  -> Browser receives one question id and prompt at a time plus the 1–5 scale
+  -> User answers every item from 1 to 5
+  -> FE calls POST /api/v1/birth/validate, then POST /api/v1/interpretation
+  -> Guest receives only a preview and three editable username suggestions
+  -> Google OAuth links the profile claim to the signed-in account
+  -> Authenticated owner fetches GET /api/v1/interpretations/{id}/full
+  -> FE shows the character card; natal and narrative details open through Lihat lengkap
 ```
 
 ## 3) Backend modules
@@ -41,18 +44,20 @@ User submits birth input (name optional)
 - `aspect_service`: major aspects (conjunction, trine, sextile, square, opposition).
 
 ### 3.3 `questionnaire`
-- `questionnaire_loader`: loads profile-specific validation questions.
-- `validation_scoring`: converts answers to confidence levels and ambiguity tags.
-- `clarification_rules`: decides if additional prompts are required.
+- `derive_personality_signals`: derives the 10 internal chart components.
+- `build_questionnaire`: asks the configured AI provider for prompts without astrology terms.
+- A deterministic fallback keeps local development and tests runnable without a provider.
+- `validate_questionnaire_answers`: requires each answer exactly once as an integer from 1 to 5.
 
 ### 3.4 `llm`
 - `llm_client`: OpenAI-compatible client adapter.
 - `interpret_prompt_builder`: builds deterministic, constrained prompts.
 - `cache_safe_response`: stores safe textual interpretation and prompt metadata.
 
-### 3.5 `gameplay`
-- `quest_generator`: map profile + questionnaire answers to quest paths.
-- `progress_service`: updates progression and unlocked milestones.
+### 3.5 `auth and ownership`
+- Signed Google sessions identify hosted users.
+- Profile claim tokens link a guest analysis to an authenticated account.
+- Full interpretations are returned only to the linked owner; guest and public payloads expose previews only.
 
 ## 4) Data model (MVP)
 
@@ -63,8 +68,9 @@ User submits birth input (name optional)
   - `latitude`, `longitude`, `timezone`, `time_unknown` (boolean), `created_at`
 - `interpretations`
   - `id`, `profile_id`, `provider`, `model`, `prompt_hash`, `response_json`, `request_payload_json`, `created_at`
-- `user_quests`
-  - `id`, `profile_id`, `quest_slug`, `status`, `score`, `completed_at`, `result_json`
+- `user_profiles`
+  - `user_sub`, `profile_id`, `linked_at`
+  - links a claimed guest profile to the Google account allowed to open its full interpretation
 - `settings`
   - `key`, `value`, `updated_at`
   - stores local admin-editable prompt, AI provider settings, and usage limits
@@ -84,23 +90,38 @@ Request:
 
 Response:
 - `profile_id`
-- `chart` (planetary snapshot if available)
-- `needs_validation` (boolean)
-- `validation_questions` (array, if true)
-- `traits` (partial, if available)
-- `roadmap_preview` (partial suggestions based on available data)
+- `claim_token` for the post-OAuth ownership link
+- `precision` with the effective-time caveat
+- `questionnaire` with the question count, 1–5 scale, and first `{id, prompt, index}` item
+
+The initial public response does not include internal chart signals, the system
+prompt, or the remaining generated questions. The displayed prompt text is
+necessarily inspectable in the browser.
+
+### `POST /api/v1/birth/question`
+- Input: `profile_id`, its `claim_token`, and the requested question index.
+- Returns only the requested `{id, prompt, index}` plus count and scale.
+- Rejects an invalid profile claim token.
 
 ### `POST /api/v1/birth/validate`
-- Input: `profile_id`, `answers` map.
-- Response: updated profile confidence and readiness for interpretation.
+- Input: `profile_id`, its `claim_token`, and an answer for every question id.
+- Rejects missing, extra, non-integer, or out-of-range answers.
+- Response: updated confidence and readiness for interpretation.
 
 ### `POST /api/v1/interpretation`
 - Input: `profile_id`, `language`.
-- Response: `interpretation` object from LLM, source metadata, and confidence level.
+- Requires the completed questionnaire.
+- Guest response contains only `preview_summary`, three highlights, three editable username suggestions, confidence, and caveat.
+- The complete result remains server-side.
+
+### `GET /api/v1/interpretations/{interpretation_id}/full`
+- Requires a Google session and a profile linked through its claim token.
+- Returns the complete structured analysis only to the profile owner.
+- `SELF_HOSTED_FULL_ACCESS=true` is the explicit self-hosted bypass.
 
 ### `POST /api/v1/interpretation/ask`
 - Input: `profile_id`, `language`, `question`.
-- Response: detailed Hermes AI answer based on the saved chart payload.
+- Requires profile ownership and returns a detailed answer based on the saved payload.
 
 ### `POST /api/v1/feedback`
 - Input: `profile_id`, `interpretation_id`, `rating`, optional message.
@@ -118,24 +139,14 @@ Response:
 ### `POST /api/v1/admin/llm-models`
 - Admin-only model sync from an OpenAI-compatible `/models` endpoint.
 
-### `POST /api/v1/quests/start`
-- Input: `profile_id`, `quest_slug`.
-- Response: quest state object.
-
-### `POST /api/v1/quests/complete`
-- Input: `quest_id`, `result_payload`.
-- Response: reward, new score, next suggestion.
-
-### `GET /api/v1/roadmap/{profile_id}`
-- Response: roadmap data for 30/60/90 days + progress percentage.
-
 ## 6) Non-functional requirements
 
 - API chart calculation should respond within 3 seconds for 95% of valid requests.
 - Same input must produce consistent chart output.
 - LLM prompts and responses must be auditable and stored with model metadata.
+- Guest, public-profile, and unauthenticated API responses must never expose `full_analysis`.
 - AI calls should be rate-limited according to admin settings before provider requests are sent.
-- PWA should show a friendly offline mode and navigation fallback when the device is disconnected.
+- Network failures should preserve the current form state and explain how to retry.
 - Input sanitation and timezone checks must protect against malformed birth payloads.
 
 ## 7) Future considerations

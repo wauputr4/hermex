@@ -4,7 +4,7 @@ This plan is optimized for a small team or solo maintainer.
 
 ## Vision
 
-Build a lightweight, fun web game for self-discovery with clear natal chart inputs and practical, confidence-aware career insights.
+Build a lightweight personality analysis flow with clear birth inputs and practical, confidence-aware insights.
 
 ## MVP target (8 weeks)
 
@@ -16,20 +16,20 @@ Build a lightweight, fun web game for self-discovery with clear natal chart inpu
 - Persist profiles and sessions in SQLite.
 
 ### Weeks 3–4: Birth + Questionnaire
-- Add optional name handling and optional birth time support.
-- Add validation questionnaire flow for missing or uncertain details.
+- Add optional birth time support with a clearly disclosed `00:00` fallback.
+- Add a chart-informed questionnaire using plain personality language and 1–5 ratings.
 - Generate early profile traits from astrology engine.
 - Return interpretation previews with confidence tags.
 - Add endpoint for validation answer submission.
 
-### Weeks 5–6: Gameplay and LLM interpretation
+### Weeks 5–6: Analysis flow and LLM interpretation
 - Implement LLM integration with configurable endpoint/model.
 - Add constrained prompt schema for safety and reproducibility.
-- Add initial native-app style quest UI:
-  - natal chart explorer,
-  - Hermes AI interpretation,
-  - minat/bakat cards,
-  - last-5-year roadmap,
+- Add a focused analysis flow:
+  - guest personality preview,
+  - editable username recommendations,
+  - Google login gate for the complete analysis,
+  - natal-chart detail after login,
   - feedback capture.
 - Add admin provider settings and prompt audit history.
 
@@ -46,19 +46,17 @@ Build a lightweight, fun web game for self-discovery with clear natal chart inpu
 
 - Stronger timezone fallback and auto-correction for birth place variants.
 - Production deployment for `hermex.fun`.
-- Jodoh Similarity for comparing two charts.
 - Long-term progress journal feature.
-- Anonymous community leaderboard.
 - Exportable insight report (optional).
 
 ## Success criteria for MVP
 
-- User can submit place + birth date (name optional, time optional).
-- Questionnaire flow runs when needed and increases confidence score.
+- User can submit place + birth date with an optional birth time.
+- Questionnaire uses 1–5 ratings and never exposes astrology terms.
 - User receives:
-  1) interest profile,
-  2) talent profile,
-  3) 2+ career roadmaps with confidence labels.
+  1) a guest preview,
+  2) editable username recommendations,
+  3) a complete analysis after Google login.
 - Main page and card render under 2.5 seconds on average connection.
 - Documentation remains complete and understandable.
 
@@ -69,9 +67,9 @@ Build a lightweight, fun web game for self-discovery with clear natal chart inpu
   - Keep AI outputs as guidance with confidence labels.
 - **Location/time precision risk**
   - Always validate timezone and allow manual override.
-- **Gameplay complexity risk**
-  - Keep mechanics simple for alpha.
-  - Add only small, meaningful expansions.
+- **Flow complexity risk**
+  - Keep the analysis steps simple for alpha.
+  - Add only changes that improve completion or clarity.
 
 ## Naming policy
 
