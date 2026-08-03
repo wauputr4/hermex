@@ -45,10 +45,9 @@ Frontend build variable:
 # Leave empty only if your deployment intentionally uses relative API paths.
 VITE_API_BASE=https://hermex.fun
 
-# Optional. Enables Google Analytics only for builds where this is set.
-# Leave empty for local development and self-hosted installs that should not
-# report usage to the hosted Hermex Fun property.
-VITE_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+# The hosted build includes the Hermex Fun Google Analytics tag (G-GSGD3Y264X).
+# Remove the gtag block from frontend/src/app.html for a self-hosted build that
+# should not report usage to the hosted Hermex Fun property.
 ```
 
 Backend variables:
