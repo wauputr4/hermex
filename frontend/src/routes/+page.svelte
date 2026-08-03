@@ -211,7 +211,7 @@
     startLoadingMessages(aiLoadingMessages);
     try {
       await validateBirth(profile.profile_id, profile.claim_token, answers);
-      const result: any = await interpretProfile(profile.profile_id, 'id');
+      const result: any = await interpretProfile(profile.profile_id, profile.claim_token, 'id');
       interpretationId = result.interpretation_id ?? '';
       guestPreview = normalizePreview(result);
       username = guestPreview.usernames[0] ?? 'steadyobserver';

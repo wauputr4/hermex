@@ -56,6 +56,8 @@ Backend variables:
 ```env
 PUBLIC_APP_URL=https://hermex.fun
 CORS_ORIGINS=https://hermex.fun
+TRUST_PROXY_HEADERS=false
+TRUSTED_PROXY_IPS=
 
 SQLITE_URL=sqlite:///./hermex.db
 
@@ -81,6 +83,12 @@ ENTITLEMENT_WEBHOOK_SECRET=replace_if_using_private_billing_service
 ```
 
 Do not deploy default local secrets. Do not commit `.env` files.
+Hermex restricts its SQLite database file to the runtime owner (`0600`) on
+POSIX systems; keep the containing directory and backups private as well.
+Only enable `TRUST_PROXY_HEADERS` when the backend is private behind a proxy,
+then list that proxy's direct IP in `TRUSTED_PROXY_IPS`. Public deployments
+should also enforce rate limits at the edge because the built-in limiter is
+kept in one backend process.
 
 ## 3. Browser cache checklist
 
