@@ -41,6 +41,9 @@ The dashboard can update:
 - temperature,
 - max tokens.
 
+Changing the base URL without entering a new API key clears the stored key.
+Model sync never reuses a stored key for a different base URL.
+
 The **Sync models** button calls:
 
 ```text

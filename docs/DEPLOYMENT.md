@@ -45,10 +45,10 @@ Frontend build variable:
 # Leave empty only if your deployment intentionally uses relative API paths.
 VITE_API_BASE=https://hermex.fun
 
-# Optional. Enables Google Analytics only for builds where this is set.
-# Leave empty for local development and self-hosted installs that should not
-# report usage to the hosted Hermex Fun property.
-VITE_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+VITE_GA_MEASUREMENT_ID=G-GSGD3Y264X
+
+# Analytics only loads when the hostname is hermex.fun or www.hermex.fun.
+# Leave the measurement ID empty for a self-hosted build.
 ```
 
 Backend variables:
@@ -56,6 +56,8 @@ Backend variables:
 ```env
 PUBLIC_APP_URL=https://hermex.fun
 CORS_ORIGINS=https://hermex.fun
+TRUST_PROXY_HEADERS=false
+TRUSTED_PROXY_IPS=
 
 SQLITE_URL=sqlite:///./hermex.db
 
@@ -81,6 +83,14 @@ ENTITLEMENT_WEBHOOK_SECRET=replace_if_using_private_billing_service
 ```
 
 Do not deploy default local secrets. Do not commit `.env` files.
+Hermex restricts its SQLite database file to the runtime owner (`0600`) on
+POSIX systems; keep the containing directory and backups private as well.
+Only enable `TRUST_PROXY_HEADERS` when the backend is private behind a proxy,
+then list that proxy's direct IP in `TRUSTED_PROXY_IPS`. Configure the proxy to
+replace client-supplied `X-Forwarded-For` before appending the direct peer; the
+backend trusts the right-most address for its single trusted proxy hop. Public deployments
+should also enforce rate limits at the edge because the built-in limiter is
+kept in one backend process.
 
 ## 3. Browser cache checklist
 

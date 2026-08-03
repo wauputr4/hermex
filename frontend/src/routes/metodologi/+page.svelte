@@ -80,7 +80,7 @@
     </ul>
   </section>
 
-  <footer><span>© {new Date().getFullYear()} Hermex</span><nav aria-label="Tautan legal"><a href="/terms">Terms</a><a href="/privacy">Privacy</a></nav></footer>
+  <footer><div><span>© {new Date().getFullYear()} Hermex</span><small>Created by <a href="https://wau.my.id" target="_blank" rel="noreferrer">wau.my.id</a></small></div><nav aria-label="Tautan footer"><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a class="social" href="https://github.com/wauputr4/hermex" aria-label="GitHub Hermex" target="_blank" rel="noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.58 9.58 0 0 1 12 6.82c.85 0 1.7.11 2.5.34 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.85v2.77c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" /></svg></a><a class="social" href="https://www.threads.com/@wauputra" aria-label="Threads @wauputra" target="_blank" rel="noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.01 2C6.49 2 3 5.66 3 11.22 3 16.73 6.27 20 11.77 20c4.68 0 7.23-2.42 7.23-6.27 0-2.64-1.49-4.62-4.26-5.3-.2-2.21-1.44-3.44-3.64-3.44-1.73 0-2.91.9-3.29 2.41l1.72.46c.2-.77.72-1.15 1.55-1.15 1.02 0 1.55.64 1.57 1.96-.3-.02-.6-.03-.91-.03-3.6 0-5.59 1.47-5.59 4.13 0 2.18 1.59 3.58 4.05 3.58 2.47 0 4.16-1.44 4.16-3.9 0-.17-.01-.33-.02-.49 1.44.49 2.13 1.57 2.13 3.18 0 2.84-1.96 4.62-5.11 4.62-4.39 0-7.04-2.78-7.04-7.4 0-4.67 2.81-7.5 7.48-7.5 4.57 0 7.15 2.85 7.15 7.45H21C21 5.76 17.57 2 12.01 2Zm-.82 11.67c-1.37 0-2.29-.65-2.29-1.65 0-1.22 1.04-1.9 3.4-1.9.42 0 .83.02 1.21.06.03.2.04.4.04.61 0 1.81-.82 2.88-2.36 2.88Z" /></svg></a></nav></footer>
 </main>
 
 <style>
@@ -115,9 +115,12 @@
   .references li:last-child { border-bottom: 1px solid #e7e1d9; }
   .references a { color: #5b55d6; font-weight: 780; }
   .references li span { color: #615968; line-height: 1.55; }
-  footer { display: flex; min-height: 100px; align-items: center; justify-content: space-between; border-top: 1px solid #e7e1d9; color: #7d7581; font-size: .85rem; }
-  footer nav { display: flex; gap: 20px; }
+  footer { display: flex; flex-wrap: wrap; min-height: 100px; align-items: center; justify-content: space-between; border-top: 1px solid #e7e1d9; color: #7d7581; font-size: .85rem; }
+  footer div small { display: block; margin-top: 5px; }
+  footer nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 20px; }
   footer a { color: inherit; text-decoration: none; }
+  footer .social { display: grid; flex: 0 0 32px; width: 32px; height: 32px; place-items: center; border: 1px solid #e7e1d9; border-radius: 50%; }
+  footer svg { width: 17px; fill: currentColor; }
   a:focus-visible { outline: 3px solid rgba(91,85,214,.25); outline-offset: 4px; border-radius: 4px; }
-  @media (max-width: 680px) { main { width: min(100% - 28px, 1000px); } header { min-height: 68px; } .hero, .plain-guide { grid-template-columns: 1fr; } .hero { padding: 58px 0 44px; } h1 { font-size: clamp(2.65rem, 14vw, 4.2rem); } article { grid-template-columns: 48px 1fr; gap: 14px; padding: 28px 0; } .step-icon { width: 44px; height: 44px; border-radius: 14px; } .step-icon svg { width: 24px; } aside { margin: 42px 0; } .references li { grid-template-columns: 1fr; gap: 6px; } }
+  @media (max-width: 680px) { main { width: min(100% - 28px, 1000px); } header { min-height: 68px; } .hero, .plain-guide { grid-template-columns: 1fr; } .hero { padding: 58px 0 44px; } h1 { font-size: clamp(2.65rem, 14vw, 4.2rem); } article { grid-template-columns: 48px 1fr; gap: 14px; padding: 28px 0; } .step-icon { width: 44px; height: 44px; border-radius: 14px; } .step-icon svg { width: 24px; } aside { margin: 42px 0; } .references li { grid-template-columns: 1fr; gap: 6px; } footer { flex-direction: column; align-items: flex-start; gap: 20px; padding: 24px 0; } footer nav { justify-content: flex-start; } }
 </style>

@@ -163,16 +163,12 @@ export async function validateBirth(profile_id: string, claim_token: string, ans
   return apiPost('/api/v1/birth/validate', { profile_id, claim_token, answers });
 }
 
-export async function interpretProfile(profile_id: string, language: 'id' | 'en') {
-  return apiPost('/api/v1/interpretation', { profile_id, language });
+export async function interpretProfile(profile_id: string, claim_token: string, language: 'id' | 'en') {
+  return apiPost('/api/v1/interpretation', { profile_id, claim_token, language });
 }
 
 export async function getFullInterpretation(interpretation_id: string) {
   return apiGet(`/api/v1/interpretations/${encodeURIComponent(interpretation_id)}/full`);
-}
-
-export async function askHermexDetail(profile_id: string, language: 'id' | 'en', question: string) {
-  return apiPost('/api/v1/interpretation/ask', { profile_id, language, question });
 }
 
 export async function submitFeedback(payload: {
