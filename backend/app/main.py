@@ -1497,7 +1497,12 @@ def build_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
         f"Aku berkembang dengan {element_focus[element]} sambil {modality_focus[modality]}.",
     ]
     questions = [
-        {"id": f"q_{index:02d}", "prompt": prompt}
+        {
+            "id": f"q_{index:02d}",
+            "prompt": prompt,
+            "component": QUESTIONNAIRE_COMPONENTS[index - 1],
+            "polarity": "direct",
+        }
         for index, prompt in enumerate(prompts, start=1)
     ]
     return {
@@ -1609,7 +1614,12 @@ async def generate_questionnaire(signals: dict[str, Any], request: Request | Non
         questionnaire = {
             "scale": fallback["scale"],
             "questions": [
-                {"id": f"q_{index:02d}", "prompt": str(prompt).strip()}
+                {
+                    "id": f"q_{index:02d}",
+                    "prompt": str(prompt).strip(),
+                    "component": QUESTIONNAIRE_COMPONENTS[index - 1],
+                    "polarity": "direct",
+                }
                 for index, prompt in enumerate(prompts, start=1)
             ],
         }
@@ -2265,14 +2275,20 @@ async def call_llm(
     temperature = config["temperature"]
     max_tokens = normalize_limit_value(max_tokens_override, 128, 8000, config["max_tokens"])
     validation_answers = (profile.get("validation") or {}).get("answers") or {}
+    questionnaire = profile.get("questionnaire") or {}
+    questions = questionnaire.get("questions") or []
+    if validation_answers and not questionnaire_is_safe(questionnaire):
+        raise HTTPException(status_code=409, detail="Questionnaire must be regenerated before interpretation")
     questionnaire_answers = [
         {
             "id": question_id,
             "component": QUESTIONNAIRE_COMPONENTS[index],
+            "assertion": re.sub(r"\s+", " ", str(questions[index]["prompt"])).strip(),
+            "polarity": "direct",
             "rating": validation_answers.get(question_id),
         }
         for index, question_id in enumerate(f"q_{number:02d}" for number in range(1, QUESTIONNAIRE_COUNT + 1))
-        if question_id in validation_answers
+        if question_id in validation_answers and index < len(questions)
     ]
     chart = profile["chart"]
 
@@ -2294,6 +2310,7 @@ async def call_llm(
         },
         "personality_signals": profile.get("personality_signals", {}),
         "traits": profile["traits"],
+        "questionnaire_scale": {"1": "strongly_disagree", "5": "strongly_agree"},
         "questionnaire_answers": questionnaire_answers,
     }
     language_name = "Indonesian" if language == "id" else "English"
