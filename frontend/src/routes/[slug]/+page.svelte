@@ -451,13 +451,13 @@
   .coming-soon li > span { grid-row: 1 / 3; display: grid; width: 34px; height: 34px; place-items: center; border-radius: 11px; background: #fff0ca; color: #5a4730; }
   .coming-soon li strong { font-size: .9rem; }
   .coming-soon li small { color: #cfc9d3; line-height: 1.4; }
-  footer { display: flex; justify-content: space-between; align-items: center; min-height: 110px; margin-top: 44px; border-top: 1px solid #e7e1d9; color: #827b82; font-size: .82rem; }
+  footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; min-height: 110px; margin-top: 44px; border-top: 1px solid #e7e1d9; color: #827b82; font-size: .82rem; }
   footer div, footer div small { display: block; }
   footer div small { max-width: 360px; margin-top: 5px; line-height: 1.45; }
   footer .credit { margin-top: 5px; }
-  footer nav { gap: 18px; padding: 0; }
+  footer nav { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 18px; padding: 0; }
   footer a { color: #615968; text-decoration: none; }
-  footer .social { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid #e7e1d9; border-radius: 50%; }
+  footer .social { display: grid; flex: 0 0 32px; width: 32px; height: 32px; place-items: center; border: 1px solid #e7e1d9; border-radius: 50%; }
   footer svg { width: 17px; fill: currentColor; }
   .empty { display: grid; justify-items: center; gap: 12px; padding: 20vh 20px 0; text-align: center; }
   .empty-icon { font-size: 3rem; color: #5b55d6; }
@@ -473,7 +473,8 @@
     .share-actions { grid-column: 1 / -1; flex-direction: column; }
     .share-actions button { width: 100%; }
     .coming-soon { grid-template-columns: 1fr; }
-    footer { align-items: flex-start; gap: 20px; padding: 24px 0; }
+    footer { flex-direction: column; align-items: flex-start; gap: 20px; padding: 24px 0; }
+    footer nav { justify-content: flex-start; }
   }
   @media (max-width: 420px) {
     .profile-shell { padding-inline: 12px; }

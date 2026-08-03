@@ -1017,7 +1017,7 @@ def rate_limit_client_key(request: Request) -> str:
     client_host = request.client.host if request.client else "unknown"
     if proxy_headers_are_trusted(request):
         forwarded_for = request.headers.get("x-forwarded-for", "")
-        trusted_host = forwarded_for.split(",", 1)[0].strip() if forwarded_for else ""
+        trusted_host = forwarded_for.rsplit(",", 1)[-1].strip() if forwarded_for else ""
         if trusted_host:
             client_host = trusted_host
     return hashlib.sha256(client_host.encode()).hexdigest()[:24]
@@ -1408,7 +1408,6 @@ def derive_personality_signals(chart: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-QUESTIONNAIRE_COUNT = 10
 QUESTIONNAIRE_WORD_MIN = 8
 QUESTIONNAIRE_WORD_MAX = 20
 QUESTIONNAIRE_COMPONENTS = (
@@ -1423,6 +1422,7 @@ QUESTIONNAIRE_COMPONENTS = (
     "dominant_focus",
     "overall_temperament",
 )
+QUESTIONNAIRE_COUNT = len(QUESTIONNAIRE_COMPONENTS)
 
 
 def build_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
@@ -1576,7 +1576,10 @@ async def generate_questionnaire(signals: dict[str, Any], request: Request | Non
     if config["provider"] == "local_fallback" or not config["base_url"] or not config["api_key"]:
         return fallback
     if request is not None:
-        enforce_ai_rate_limit(request)
+        try:
+            enforce_ai_rate_limit(request)
+        except HTTPException:
+            return fallback
 
     request_payload = {
         "model": config["model"],
@@ -1611,6 +1614,8 @@ async def generate_questionnaire(signals: dict[str, Any], request: Request | Non
         if content.startswith("```"):
             content = content.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
         prompts = json.loads(content).get("questions") or []
+        if len(prompts) != QUESTIONNAIRE_COUNT:
+            return fallback
         questionnaire = {
             "scale": fallback["scale"],
             "questions": [
@@ -2367,7 +2372,7 @@ async def call_llm(
 
     try:
         data = response.json()
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
         text = response.text.strip()
         streamed_content = parse_sse_chat_content(text)
         if streamed_content:
@@ -2378,7 +2383,7 @@ async def call_llm(
                 "request_payload": request_payload,
                 "response": normalize_personality_response(parse_llm_content(streamed_content), profile, language),
             }
-        raise HTTPException(status_code=502, detail="Layanan AI mengirim respons yang tidak dapat dibaca. Coba lagi sebentar.")
+        raise HTTPException(status_code=502, detail="Layanan AI mengirim respons yang tidak dapat dibaca. Coba lagi sebentar.") from exc
 
     content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
     parsed = normalize_personality_response(parse_llm_content(content, raw=data), profile, language)
@@ -2412,7 +2417,13 @@ def startup() -> None:
 
 @app.get("/api/v1/health")
 def health() -> dict[str, Any]:
-    return {"status": "ok", "service": "hermex-api", "database": "ok"}
+    try:
+        with db() as conn:
+            conn.execute("SELECT 1").fetchone()
+        database_status = "ok"
+    except sqlite3.Error:
+        database_status = "error"
+    return {"status": "ok", "service": "hermex-api", "database": database_status}
 
 
 @app.get("/api/v1/auth/google/start")
@@ -2990,7 +3001,7 @@ async def interpretation(payload: InterpretationInput, request: Request) -> dict
     valid_claim = bool(
         payload.claim_token
         and expected_token
-        and secrets.compare_digest(payload.claim_token, expected_token)
+        and secrets.compare_digest(payload.claim_token.encode(), expected_token.encode())
     )
     if not valid_claim and not viewer_owns_profile(profile["profile_id"], request):
         raise HTTPException(status_code=403, detail="Profile claim token or linked ownership is required")

@@ -86,7 +86,9 @@ Do not deploy default local secrets. Do not commit `.env` files.
 Hermex restricts its SQLite database file to the runtime owner (`0600`) on
 POSIX systems; keep the containing directory and backups private as well.
 Only enable `TRUST_PROXY_HEADERS` when the backend is private behind a proxy,
-then list that proxy's direct IP in `TRUSTED_PROXY_IPS`. Public deployments
+then list that proxy's direct IP in `TRUSTED_PROXY_IPS`. Configure the proxy to
+replace client-supplied `X-Forwarded-For` before appending the direct peer; the
+backend trusts the right-most address for its single trusted proxy hop. Public deployments
 should also enforce rate limits at the edge because the built-in limiter is
 kept in one backend process.
 

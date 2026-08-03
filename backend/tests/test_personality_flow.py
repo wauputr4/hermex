@@ -194,6 +194,20 @@ class PersonalityFlowTest(unittest.TestCase):
         second = Request({**base_scope, "headers": [(b"user-agent", b"browser-b")]})
         self.assertEqual(main.rate_limit_client_key(first), main.rate_limit_client_key(second))
 
+    def test_rate_limit_identity_uses_rightmost_forwarded_address_from_trusted_proxy(self) -> None:
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/test",
+            "client": ("127.0.0.1", 1234),
+        }
+        first = Request({**scope, "headers": [(b"x-forwarded-for", b"spoof-a, 198.51.100.7")]})
+        same_peer = Request({**scope, "headers": [(b"x-forwarded-for", b"spoof-b, 198.51.100.7")]})
+        other_peer = Request({**scope, "headers": [(b"x-forwarded-for", b"spoof-a, 198.51.100.8")]})
+        with patch.dict(os.environ, {"TRUST_PROXY_HEADERS": "true", "TRUSTED_PROXY_IPS": "127.0.0.1"}):
+            self.assertEqual(main.rate_limit_client_key(first), main.rate_limit_client_key(same_peer))
+            self.assertNotEqual(main.rate_limit_client_key(first), main.rate_limit_client_key(other_peer))
+
     def test_proxy_headers_require_an_explicit_trusted_proxy(self) -> None:
         headers = [
             (b"host", b"hermex.fun"),
@@ -343,6 +357,18 @@ class PersonalityFlowTest(unittest.TestCase):
         self.assertEqual([item["prompt"] for item in questionnaire["questions"]], prompts)
         enforce_limit.assert_called_once_with(request)
 
+        content = json.dumps({"questions": [*prompts, "Aku adalah pertanyaan tambahan yang seharusnya ditolak oleh sistem."]})
+        with patch.object(main, "get_llm_config", return_value=config), patch.object(main.httpx, "AsyncClient", FakeClient):
+            questionnaire = asyncio.run(main.generate_questionnaire(signals))
+        self.assertEqual(questionnaire, main.build_questionnaire(signals))
+
+        with (
+            patch.object(main, "get_llm_config", return_value=config),
+            patch.object(main, "enforce_ai_rate_limit", side_effect=HTTPException(status_code=429)),
+        ):
+            questionnaire = asyncio.run(main.generate_questionnaire(signals, request))
+        self.assertEqual(questionnaire, main.build_questionnaire(signals))
+
     def test_configured_llm_failure_never_returns_a_template(self) -> None:
         chart = main.compute_chart(self.birth)
         profile = {
@@ -489,6 +515,8 @@ class PersonalityFlowTest(unittest.TestCase):
                 self.assertEqual(db_path.stat().st_mode & 0o777, 0o600)
             self.assertEqual(health["database"], "ok")
             self.assertNotIn(str(db_path), str(health))
+        with patch.object(main, "db", side_effect=sqlite3.OperationalError("unavailable")):
+            self.assertEqual(main.health()["database"], "error")
 
     def test_changing_llm_base_url_clears_stored_key(self) -> None:
         saved: dict[str, str] = {}
@@ -651,6 +679,16 @@ class PersonalityFlowTest(unittest.TestCase):
                     json={"profile_id": analyzed["profile_id"], "language": "id"},
                 )
                 self.assertEqual(unauthorized_interpretation.status_code, 403)
+                for invalid_token in ("x" * 20, "é" * 20):
+                    invalid_interpretation = client.post(
+                        "/api/v1/interpretation",
+                        json={
+                            "profile_id": analyzed["profile_id"],
+                            "claim_token": invalid_token,
+                            "language": "id",
+                        },
+                    )
+                    self.assertEqual(invalid_interpretation.status_code, 403)
                 interpreted = client.post(
                     "/api/v1/interpretation",
                     json={

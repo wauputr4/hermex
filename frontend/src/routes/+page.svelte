@@ -734,11 +734,11 @@
   .methodology-link:focus-visible { outline: 3px solid rgba(91,85,214,.25); outline-offset: 3px; }
   .error-state > span { display: grid; width: 54px; height: 54px; margin-bottom: 22px; place-items: center; border-radius: 50%; background: #fbe6e9; color: #a33c52; font-size: 1.5rem; font-weight: 800; }
   .error-state .primary { width: auto; min-width: 180px; }
-  footer { display: flex; justify-content: space-between; align-items: center; min-height: 100px; border-top: 1px solid #e7e1d9; color: #827b82; font-size: .82rem; }
+  footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; min-height: 100px; border-top: 1px solid #e7e1d9; color: #827b82; font-size: .82rem; }
   footer .credit { display: block; margin-top: 5px; }
-  footer nav { display: flex; align-items: center; gap: 18px; }
+  footer nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 18px; }
   footer a { color: #615968; text-decoration: none; }
-  footer .social { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid #e7e1d9; border-radius: 50%; }
+  footer .social { display: grid; flex: 0 0 32px; width: 32px; height: 32px; place-items: center; border: 1px solid #e7e1d9; border-radius: 50%; }
   footer svg { width: 17px; fill: currentColor; }
   @keyframes breathe { 50% { transform: scale(1.035) rotate(1.5deg); opacity: .82; } }
   @keyframes signal { 50% { box-shadow: 0 0 0 10px rgba(91,85,214,0); opacity: .72; } }
@@ -763,7 +763,8 @@
   @media (max-width: 480px) {
     .date-time { grid-template-columns: 1fr; }
     .planet-list { grid-template-columns: 1fr; }
-    footer { align-items: flex-start; gap: 20px; padding: 24px 0; }
+    footer { flex-direction: column; align-items: flex-start; gap: 20px; padding: 24px 0; }
+    footer nav { justify-content: flex-start; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
