@@ -2,10 +2,11 @@ import os
 import asyncio
 import copy
 import json
+import re
 import sqlite3
 import tempfile
 import unittest
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -61,7 +62,12 @@ class PersonalityFlowTest(unittest.TestCase):
         )
         public_text = " ".join(item["prompt"].lower() for item in questionnaire["questions"])
         self.assertNotIn("saya", public_text)
-        self.assertTrue(all("aku" in item["prompt"].lower() for item in questionnaire["questions"]))
+        self.assertTrue(
+            all(re.search(r"\baku\b", item["prompt"], re.IGNORECASE) for item in questionnaire["questions"])
+        )
+        self.assertTrue(
+            all(not re.search(r"\bsaya\b", item["prompt"], re.IGNORECASE) for item in questionnaire["questions"])
+        )
         for forbidden in ("astrologi", "zodiak", "planet", "rumah", "aspek", "chart", "kosmik"):
             self.assertNotIn(forbidden, public_text)
 
@@ -143,9 +149,18 @@ class PersonalityFlowTest(unittest.TestCase):
         main.RATE_LIMIT_BUCKETS.update({f"fresh-{index}": [now] for index in range(main.RATE_LIMIT_BUCKET_LIMIT)})
         request = Request({"type": "http", "method": "POST", "path": "/api/test", "headers": []})
 
-        main.enforce_public_write_rate_limit(request, "test", minute_limit=100, day_limit=1000)
+        with self.assertRaises(HTTPException) as error:
+            main.enforce_public_write_rate_limit(request, "test", minute_limit=100, day_limit=1000)
 
-        self.assertLessEqual(len(main.RATE_LIMIT_BUCKETS), main.RATE_LIMIT_BUCKET_LIMIT)
+        self.assertEqual(error.exception.status_code, 429)
+        self.assertEqual(len(main.RATE_LIMIT_BUCKETS), main.RATE_LIMIT_BUCKET_LIMIT)
+        self.assertIn("fresh-0", main.RATE_LIMIT_BUCKETS)
+
+        main.RATE_LIMIT_BUCKETS.clear()
+        main.RATE_LIMIT_BUCKETS["stale"] = [now - timedelta(days=2)]
+        main.RATE_LIMIT_BUCKETS.update({f"active-{index}": [now] for index in range(main.RATE_LIMIT_BUCKET_LIMIT - 1)})
+        main.enforce_public_write_rate_limit(request, "test", minute_limit=100, day_limit=1000)
+        self.assertNotIn("stale", main.RATE_LIMIT_BUCKETS)
 
     def test_personality_response_unwraps_double_encoded_json_and_expands_sections(self) -> None:
         chart = main.compute_chart(self.birth)
@@ -228,10 +243,12 @@ class PersonalityFlowTest(unittest.TestCase):
 
     def test_questionnaire_generation_falls_back_without_provider(self) -> None:
         signals = main.derive_personality_signals(main.compute_chart(self.birth))
+        signals["angular_and_dominant_houses"]["angular_planets"] = []
         with patch.dict(os.environ, {"LLM_PROVIDER": "local_fallback"}):
             questionnaire = asyncio.run(main.generate_questionnaire(signals))
         self.assertEqual(questionnaire, main.build_questionnaire(signals))
         self.assertTrue(main.questionnaire_is_safe(questionnaire))
+        self.assertIn("Aku", questionnaire["questions"][8]["prompt"])
 
     def test_questionnaire_generation_uses_configured_ai(self) -> None:
         prompts = [
@@ -345,7 +362,7 @@ class PersonalityFlowTest(unittest.TestCase):
                 main.init_db()
                 with main.db() as conn:
                     seeded = {row[0] for row in conn.execute("SELECT slug FROM sky_posts")}
-        self.assertTrue(expected.issubset(seeded))
+        self.assertEqual(seeded, expected)
         self.assertEqual(set(post["slug"] for post in main.default_sky_posts()), expected)
 
     def test_profile_owner_is_enforced_outside_self_hosted_mode(self) -> None:

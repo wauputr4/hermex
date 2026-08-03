@@ -2,11 +2,11 @@
   export let data: { posts: any[] };
 </script>
 
-<svelte:head><title>Berita Langit — Hermex Fun</title><meta name="description" content="Arsip bulanan kejadian yang benar-benar terjadi dan kaitannya dengan peristiwa langit." /></svelte:head>
+<svelte:head><title>Berita Langit — Hermex Fun</title><meta name="description" content="Arsip bulanan kejadian yang benar-benar terjadi dan kaitannya dengan pola langit yang dibahas setelah kejadian." /></svelte:head>
 
 <main>
   <nav><a href="/">☆ hermex.fun | analisis kepribadian</a></nav>
-  <header><p>BERITA LANGIT</p><h1>Yang terjadi, dibaca dari langit</h1><span>Arsip bulanan kejadian yang benar-benar terjadi dan kaitannya dengan peristiwa langit setelah kejadian.</span></header>
+  <header><p>BERITA LANGIT</p><h1>Yang terjadi, dibaca dari langit</h1><span>Arsip bulanan kejadian yang benar-benar terjadi dan kaitannya dengan pola langit yang dibahas setelah kejadian.</span></header>
   <section aria-label="Daftar artikel">
     {#each data.posts as post}
       <a href={`/berita-langit/${post.slug}`}>

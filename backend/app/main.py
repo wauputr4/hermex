@@ -1020,11 +1020,39 @@ def _cleanup_rate_limit_bucket(events: list[datetime], now: datetime) -> list[da
 
 def _rate_limit_bucket(key: str, now: datetime) -> list[datetime]:
     if len(RATE_LIMIT_BUCKETS) >= RATE_LIMIT_BUCKET_LIMIT and key not in RATE_LIMIT_BUCKETS:
-        RATE_LIMIT_BUCKETS.popitem(last=False)
+        cutoff = now - timedelta(days=1)
+        expired_keys = [
+            bucket_key
+            for bucket_key, bucket_events in RATE_LIMIT_BUCKETS.items()
+            if not any(event_time > cutoff for event_time in bucket_events)
+        ]
+        for expired_key in expired_keys:
+            RATE_LIMIT_BUCKETS.pop(expired_key, None)
+            if len(RATE_LIMIT_BUCKETS) < RATE_LIMIT_BUCKET_LIMIT:
+                break
+        if len(RATE_LIMIT_BUCKETS) >= RATE_LIMIT_BUCKET_LIMIT:
+            raise HTTPException(status_code=429, detail="Rate limit capacity reached. Try again later.")
     events = _cleanup_rate_limit_bucket(RATE_LIMIT_BUCKETS.get(key, []), now)
     RATE_LIMIT_BUCKETS[key] = events
     RATE_LIMIT_BUCKETS.move_to_end(key)
     return events
+
+
+def _enforce_bucket_limit(key: str, now: datetime, minute_limit: int, day_limit: int, label: str) -> None:
+    with RATE_LIMIT_LOCK:
+        events = _rate_limit_bucket(key, now)
+        minute_events = [event_time for event_time in events if now - event_time < timedelta(minutes=1)]
+        if len(minute_events) >= minute_limit:
+            raise HTTPException(
+                status_code=429,
+                detail=f"{label} limit reached: max {minute_limit} request(s) per minute.",
+            )
+        if len(events) >= day_limit:
+            raise HTTPException(
+                status_code=429,
+                detail=f"{label} limit reached: max {day_limit} request(s) per day.",
+            )
+        events.append(now)
 
 
 def enforce_ai_rate_limit(request: Request, profile_id: str | None = None) -> dict[str, Any]:
@@ -1034,20 +1062,7 @@ def enforce_ai_rate_limit(request: Request, profile_id: str | None = None) -> di
     day_limit = max(1, int(entitlement["limits"]["requests_per_day"]))
     now = datetime.now(timezone.utc)
     key = f"ai:{entitlement['subject_key']}"
-    with RATE_LIMIT_LOCK:
-        events = _rate_limit_bucket(key, now)
-        minute_events = [event_time for event_time in events if now - event_time < timedelta(minutes=1)]
-        if len(minute_events) >= minute_limit:
-            raise HTTPException(
-                status_code=429,
-                detail=f"AI request limit reached: max {minute_limit} request(s) per minute.",
-            )
-        if len(events) >= day_limit:
-            raise HTTPException(
-                status_code=429,
-                detail=f"AI request limit reached: max {day_limit} request(s) per day.",
-            )
-        events.append(now)
+    _enforce_bucket_limit(key, now, minute_limit, day_limit, "AI request")
     return entitlement
 
 
@@ -1061,20 +1076,7 @@ def enforce_public_write_rate_limit(
     day_limit = day_limit or env_int("PUBLIC_WRITE_REQUESTS_PER_DAY", 200)
     now = datetime.now(timezone.utc)
     key = f"write:{action}:{rate_limit_client_key(request)}"
-    with RATE_LIMIT_LOCK:
-        events = _rate_limit_bucket(key, now)
-        minute_events = [event_time for event_time in events if now - event_time < timedelta(minutes=1)]
-        if len(minute_events) >= minute_limit:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Write request limit reached: max {minute_limit} request(s) per minute.",
-            )
-        if len(events) >= day_limit:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Write request limit reached: max {day_limit} request(s) per day.",
-            )
-        events.append(now)
+    _enforce_bucket_limit(key, now, minute_limit, day_limit, "Write request")
 
 
 def now_iso() -> str:
@@ -1468,7 +1470,7 @@ def build_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
         (
             f"Aku gampang terlihat saat sibuk dengan {house_focus[dominant_house]}."
             if visible_focus.get("angular_planets")
-            else f"Perhatianku sering kembali ke {house_focus[dominant_house]}, walau kesibukanku berubah."
+            else f"Aku sering memberi perhatian pada {house_focus[dominant_house]}, walau kesibukanku berubah."
         ),
         f"Aku berkembang dengan {element_focus[element]} sambil {modality_focus[modality]}.",
     ]

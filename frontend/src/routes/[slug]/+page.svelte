@@ -104,9 +104,10 @@
     const parsed = parseJson(value);
     const candidates = Array.isArray(parsed) && parsed.length ? parsed : fallback;
     return candidates.slice(0, 3).map((item: any, index) => {
-      const rawWord = typeof item === 'object' ? textValue(item.word ?? item.label) : textValue(item);
+      const isObject = item !== null && typeof item === 'object';
+      const rawWord = isObject ? textValue(item.word ?? item.label) : textValue(item);
       const word = (rawWord.trim().split(/\s+/)[0] || '').replace(/[^\p{L}\p{N}-]/gu, '');
-      return { word, icon: typeof item === 'object' && item.icon ? String(item.icon) : iconFor(word, index) };
+      return { word, icon: isObject && item.icon ? String(item.icon) : iconFor(word, index) };
     }).filter((item) => item.word);
   }
 
@@ -442,6 +443,7 @@
   .community-link strong, .community-link small { display: block; }
   .community-link small { margin-top: 3px; color: #716a78; }
   .coming-soon { display: grid; grid-template-columns: minmax(190px, .7fr) minmax(0, 1.3fr); gap: 34px; margin-top: 34px; border: 1px solid #ded9d1; border-radius: 26px; padding: clamp(24px, 5vw, 40px); background: #302a36; color: #fff; }
+  .coming-soon .eyebrow { color: #f1b86a; }
   .coming-soon-heading > p:last-child { margin: 14px 0 0; color: #d9d4dd; line-height: 1.55; }
   .coming-soon h2 { font-size: 1.65rem; }
   .coming-soon ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
