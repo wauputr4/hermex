@@ -5,7 +5,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -137,6 +137,15 @@ class PersonalityFlowTest(unittest.TestCase):
         self.assertIn(main.masked_secret_label(secret), view)
         self.assertNotIn('id="api-key"', view)
         self.assertIn('id="api-key" type="password" value=""', edit)
+
+    def test_rate_limit_bucket_count_is_bounded(self) -> None:
+        now = datetime.now(timezone.utc)
+        main.RATE_LIMIT_BUCKETS.update({f"fresh-{index}": [now] for index in range(main.RATE_LIMIT_BUCKET_LIMIT)})
+        request = Request({"type": "http", "method": "POST", "path": "/api/test", "headers": []})
+
+        main.enforce_public_write_rate_limit(request, "test", minute_limit=100, day_limit=1000)
+
+        self.assertLessEqual(len(main.RATE_LIMIT_BUCKETS), main.RATE_LIMIT_BUCKET_LIMIT)
 
     def test_personality_response_unwraps_double_encoded_json_and_expands_sections(self) -> None:
         chart = main.compute_chart(self.birth)
