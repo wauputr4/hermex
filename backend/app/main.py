@@ -5,13 +5,16 @@ import hmac
 import html
 import json
 import os
+import re
 import secrets
 import sqlite3
 import urllib.parse
 import uuid
+from collections import OrderedDict
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -37,7 +40,9 @@ if not DB_PATH.is_absolute():
     DB_PATH = Path.cwd() / DB_PATH
 
 security = HTTPBasic()
-RATE_LIMIT_BUCKETS: dict[str, list[datetime]] = {}
+RATE_LIMIT_BUCKETS: OrderedDict[str, list[datetime]] = OrderedDict()
+RATE_LIMIT_BUCKET_LIMIT = 10_000
+RATE_LIMIT_LOCK = Lock()
 ADMIN_COOKIE_NAME = "hermex_admin"
 GOOGLE_COOKIE_NAME = "hermex_google"
 OAUTH_STATE_COOKIE_NAME = "hermex_oauth_state"
@@ -403,6 +408,9 @@ def init_db() -> None:
         retired_slugs = (
             "setahun-di-langit-agustus-2025-juli-2026",
             "desember-2025-batas-bukti-review",
+            "bulan-sebagai-ritme-harian",
+            "merkurius-dan-cuaca-komunikasi",
+            "saturnus-dan-struktur-sosial",
         )
         conn.executemany("DELETE FROM sky_posts WHERE slug = ?", ((slug,) for slug in retired_slugs))
         for post in default_sky_posts():
@@ -1005,32 +1013,56 @@ def rate_limit_client_key(request: Request) -> str:
     return hashlib.sha256(f"{client_host}:{user_agent}".encode()).hexdigest()[:24]
 
 
+def _cleanup_rate_limit_bucket(events: list[datetime], now: datetime) -> list[datetime]:
+    cutoff = now - timedelta(days=1)
+    return [event_time for event_time in events if event_time > cutoff]
+
+
+def _rate_limit_bucket(key: str, now: datetime) -> list[datetime]:
+    if len(RATE_LIMIT_BUCKETS) >= RATE_LIMIT_BUCKET_LIMIT and key not in RATE_LIMIT_BUCKETS:
+        cutoff = now - timedelta(days=1)
+        expired_keys = [
+            bucket_key
+            for bucket_key, bucket_events in RATE_LIMIT_BUCKETS.items()
+            if not any(event_time > cutoff for event_time in bucket_events)
+        ]
+        for expired_key in expired_keys:
+            RATE_LIMIT_BUCKETS.pop(expired_key, None)
+            if len(RATE_LIMIT_BUCKETS) < RATE_LIMIT_BUCKET_LIMIT:
+                break
+        if len(RATE_LIMIT_BUCKETS) >= RATE_LIMIT_BUCKET_LIMIT:
+            raise HTTPException(status_code=429, detail="Rate limit capacity reached. Try again later.")
+    events = _cleanup_rate_limit_bucket(RATE_LIMIT_BUCKETS.get(key, []), now)
+    RATE_LIMIT_BUCKETS[key] = events
+    RATE_LIMIT_BUCKETS.move_to_end(key)
+    return events
+
+
+def _enforce_bucket_limit(key: str, now: datetime, minute_limit: int, day_limit: int, label: str) -> None:
+    with RATE_LIMIT_LOCK:
+        events = _rate_limit_bucket(key, now)
+        minute_events = [event_time for event_time in events if now - event_time < timedelta(minutes=1)]
+        if len(minute_events) >= minute_limit:
+            raise HTTPException(
+                status_code=429,
+                detail=f"{label} limit reached: max {minute_limit} request(s) per minute.",
+            )
+        if len(events) >= day_limit:
+            raise HTTPException(
+                status_code=429,
+                detail=f"{label} limit reached: max {day_limit} request(s) per day.",
+            )
+        events.append(now)
+
+
 def enforce_ai_rate_limit(request: Request, profile_id: str | None = None) -> dict[str, Any]:
     entitlement = current_entitlement(request)
     request.state.hermex_entitlement = entitlement
     minute_limit = max(1, int(entitlement["limits"]["requests_per_minute"]))
     day_limit = max(1, int(entitlement["limits"]["requests_per_day"]))
     now = datetime.now(timezone.utc)
-    stale_cutoff = now - timedelta(days=1)
-    for bucket_key, bucket_events in list(RATE_LIMIT_BUCKETS.items()):
-        bucket_events[:] = [event_time for event_time in bucket_events if event_time > stale_cutoff]
-        if not bucket_events:
-            RATE_LIMIT_BUCKETS.pop(bucket_key, None)
     key = f"ai:{entitlement['subject_key']}"
-    events = RATE_LIMIT_BUCKETS.setdefault(key, [])
-    events[:] = [event_time for event_time in events if now - event_time < timedelta(days=1)]
-    minute_events = [event_time for event_time in events if now - event_time < timedelta(minutes=1)]
-    if len(minute_events) >= minute_limit:
-        raise HTTPException(
-            status_code=429,
-            detail=f"AI request limit reached: max {minute_limit} request(s) per minute.",
-        )
-    if len(events) >= day_limit:
-        raise HTTPException(
-            status_code=429,
-            detail=f"AI request limit reached: max {day_limit} request(s) per day.",
-        )
-    events.append(now)
+    _enforce_bucket_limit(key, now, minute_limit, day_limit, "AI request")
     return entitlement
 
 
@@ -1043,26 +1075,8 @@ def enforce_public_write_rate_limit(
     minute_limit = minute_limit or env_int("PUBLIC_WRITE_REQUESTS_PER_MINUTE", 20)
     day_limit = day_limit or env_int("PUBLIC_WRITE_REQUESTS_PER_DAY", 200)
     now = datetime.now(timezone.utc)
-    stale_cutoff = now - timedelta(days=1)
-    for bucket_key, bucket_events in list(RATE_LIMIT_BUCKETS.items()):
-        bucket_events[:] = [event_time for event_time in bucket_events if event_time > stale_cutoff]
-        if not bucket_events:
-            RATE_LIMIT_BUCKETS.pop(bucket_key, None)
     key = f"write:{action}:{rate_limit_client_key(request)}"
-    events = RATE_LIMIT_BUCKETS.setdefault(key, [])
-    events[:] = [event_time for event_time in events if now - event_time < timedelta(days=1)]
-    minute_events = [event_time for event_time in events if now - event_time < timedelta(minutes=1)]
-    if len(minute_events) >= minute_limit:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Write request limit reached: max {minute_limit} request(s) per minute.",
-        )
-    if len(events) >= day_limit:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Write request limit reached: max {day_limit} request(s) per day.",
-        )
-    events.append(now)
+    _enforce_bucket_limit(key, now, minute_limit, day_limit, "Write request")
 
 
 def now_iso() -> str:
@@ -1386,7 +1400,7 @@ def derive_personality_signals(chart: dict[str, Any]) -> dict[str, Any]:
 
 QUESTIONNAIRE_COUNT = 10
 QUESTIONNAIRE_WORD_MIN = 8
-QUESTIONNAIRE_WORD_MAX = 22
+QUESTIONNAIRE_WORD_MAX = 20
 
 
 def build_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
@@ -1398,29 +1412,29 @@ def build_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
         for item in signals.get("major_aspects") or []
     )
     element_focus = {
-        "fire": "bergerak berani menuju pengalaman baru",
-        "earth": "membangun sesuatu yang nyata dan dapat diandalkan",
-        "air": "bertukar gagasan dan melihat banyak sudut pandang",
-        "water": "memahami perasaan serta suasana yang tidak terucap",
+        "fire": "berani mencoba pengalaman baru",
+        "earth": "membuat rencana jadi sesuatu yang bisa dijalankan",
+        "air": "bertukar pikiran dan melihat sudut pandang baru",
+        "water": "memahami perasaan dan suasana yang tak terucap",
     }
     modality_focus = {
-        "cardinal": "mengambil langkah pertama saat arah belum jelas",
-        "fixed": "mempertahankan pilihan sampai prosesnya benar-benar selesai",
-        "mutable": "menyesuaikan cara ketika keadaan berubah dengan cepat",
+        "cardinal": "memulai dulu saat arahnya belum jelas",
+        "fixed": "bertahan sampai urusannya benar-benar selesai",
+        "mutable": "mengubah cara saat keadaan berubah",
     }
     house_focus = {
-        1: "cara membawa diri dan mengambil inisiatif",
-        2: "rasa aman, nilai pribadi, dan sumber daya",
-        3: "belajar, berbicara, dan memahami lingkungan dekat",
-        4: "keluarga, akar kehidupan, dan ruang pribadi",
-        5: "kreativitas, kesenangan, dan keberanian mengekspresikan diri",
-        6: "kebiasaan, pekerjaan harian, dan cara merawat diri",
-        7: "kemitraan, kompromi, dan hubungan dekat",
-        8: "kepercayaan, perubahan mendalam, dan hal yang dibagi",
-        9: "keyakinan, penjelajahan, dan pencarian makna",
-        10: "tanggung jawab, pencapaian, dan peran di masyarakat",
-        11: "persahabatan, komunitas, dan cita-cita bersama",
-        12: "refleksi, pemulihan, dan kebutuhan akan ruang sunyi",
+        1: "membawa diri dan memulai sesuatu",
+        2: "rasa aman, nilai diri, dan uang",
+        3: "belajar, berbicara, dan lingkungan dekat",
+        4: "keluarga dan ruang pribadi",
+        5: "kreativitas dan cara mengekspresikan diri",
+        6: "rutinitas, pekerjaan, dan merawat diri",
+        7: "hubungan dekat dan kerja sama",
+        8: "kepercayaan dan perubahan besar",
+        9: "keyakinan dan pencarian makna",
+        10: "tanggung jawab dan pencapaian",
+        11: "pertemanan dan tujuan bersama",
+        12: "merenung, pulih, dan menyendiri",
     }
 
     def position_element(key: str) -> str:
@@ -1441,24 +1455,24 @@ def build_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
     dominant_houses = visible_focus.get("dominant_houses") or []
     dominant_house = int(dominant_houses[0]["house"]) if dominant_houses else 1
     prompts = [
-        f"Saya paling menjadi diri sendiri saat {element_focus[position_element('sun')]} dalam {position_house('sun')}.",
-        f"Saya merasa aman saat {element_focus[position_element('moon')]} dalam {position_house('moon')}.",
-        f"Dalam situasi baru, saya cenderung {modality_focus[position_modality('ascendant')] }.",
-        f"Arah tindakan saya mengikuti dorongan untuk {modality_focus[str(ruler_position.get('modality') or modality)]} dalam {house_focus[int(ruler.get('house') or 1)]}.",
-        f"Saya memahami informasi dengan {element_focus[position_element('mercury')]}, terutama dalam {position_house('mercury')}.",
-        f"Saya membangun kedekatan dengan {element_focus[position_element('venus')]} dalam {position_house('venus')}.",
-        f"Saat mengejar tujuan, saya {modality_focus[position_modality('mars')]} dalam {position_house('mars')}.",
+        f"Aku paling menjadi diri sendiri saat {element_focus[position_element('sun')]} lewat {position_house('sun')}.",
+        f"Aku merasa aman saat {element_focus[position_element('moon')]} lewat {position_house('moon')}.",
+        f"Di situasi baru, aku cenderung {modality_focus[position_modality('ascendant')]}.",
+        f"Aku biasanya {modality_focus[str(ruler_position.get('modality') or modality)]} dalam {house_focus[int(ruler.get('house') or 1)]}.",
+        f"Aku lebih mudah paham saat {element_focus[position_element('mercury')]} lewat {position_house('mercury')}.",
+        f"Aku membangun kedekatan dengan {element_focus[position_element('venus')]} lewat {position_house('venus')}.",
+        f"Saat mengejar tujuan, aku {modality_focus[position_modality('mars')]} dalam {position_house('mars')}.",
         (
-            "Beberapa dorongan dalam diri saya sering beradu sebelum keputusan terasa mantap."
+            "Dorongan dalam diriku sering bertabrakan sebelum aku yakin memilih."
             if has_tension
-            else "Pikiran, perasaan, dan tindakan saya biasanya saling mendukung ketika mengambil keputusan."
+            else "Pikiran, perasaan, dan tindakanku biasanya sejalan saat aku memilih."
         ),
         (
-            f"Saya mudah terlihat menonjol saat terlibat dalam {house_focus[dominant_house]}."
+            f"Aku gampang terlihat saat sibuk dengan {house_focus[dominant_house]}."
             if visible_focus.get("angular_planets")
-            else f"Perhatian saya sering kembali pada {house_focus[dominant_house]}, meski kesibukan berubah."
+            else f"Aku sering memberi perhatian pada {house_focus[dominant_house]}, walau kesibukanku berubah."
         ),
-        f"Secara umum, saya berkembang dengan {element_focus[element]} sambil {modality_focus[modality]}.",
+        f"Aku berkembang dengan {element_focus[element]} sambil {modality_focus[modality]}.",
     ]
     questions = [
         {"id": f"q_{index:02d}", "prompt": prompt}
@@ -1519,6 +1533,7 @@ def questionnaire_is_safe(questionnaire: dict[str, Any]) -> bool:
     public_text = " ".join(prompts).lower()
     return (
         all(QUESTIONNAIRE_WORD_MIN <= len(prompt.split()) <= QUESTIONNAIRE_WORD_MAX for prompt in prompts)
+        and all(re.search(r"\baku\b", prompt.lower()) and not re.search(r"\bsaya\b", prompt.lower()) for prompt in prompts)
         and not any(term in public_text for term in QUESTIONNAIRE_FORBIDDEN_TERMS)
     )
 
@@ -1537,6 +1552,7 @@ async def generate_questionnaire(signals: dict[str, Any]) -> dict[str, Any]:
                 "content": (
                     "Buat tepat 10 pernyataan refleksi kepribadian berbahasa Indonesia untuk dinilai 1-5. "
                     f"Setiap pernyataan harus {QUESTIONNAIRE_WORD_MIN}-{QUESTIONNAIRE_WORD_MAX} kata dan harus spesifik pada internal_signals yang diberikan. "
+                    "Gunakan kata ganti 'aku', bahasa sehari-hari, satu gagasan per pernyataan, dan kalimat yang ringkas. "
                     "Bahas berurutan: identitas, kebutuhan emosi, cara hadir, arah tindakan, cara berpikir, "
                     "relasi dan nilai, ketegasan dan batas, ketegangan batin, fokus hidup, lalu temperamen umum. "
                     "Jangan sebut astrologi, zodiak, planet, rumah, aspek, chart, natal, horoskop, transit, atau kosmik. "
@@ -2299,7 +2315,7 @@ async def call_llm(
     }
 
 
-app = FastAPI(title="Hermex API", version="0.1.0-alpha")
+app = FastAPI(title="Hermex API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv(

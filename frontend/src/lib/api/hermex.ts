@@ -58,7 +58,7 @@ export type QuestionnaireAnswer = Record<string, number>;
 
 export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    throw new Error('Hermex is offline. Saved guest history and education are still available.');
+    throw new Error('Hermex sedang offline. Coba lagi saat koneksi kembali.');
   }
 
   const response = await fetch(`${API_BASE}${path}`, {
@@ -77,7 +77,7 @@ export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
 
 export async function apiGet<T>(path: string): Promise<T> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    throw new Error('Hermex is offline. Saved guest history and education are still available.');
+    throw new Error('Hermex sedang offline. Coba lagi saat koneksi kembali.');
   }
 
   const response = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
@@ -91,7 +91,7 @@ export async function apiGet<T>(path: string): Promise<T> {
 
 export async function apiDelete<T>(path: string): Promise<T> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    throw new Error('Hermex is offline. Saved guest history and education are still available.');
+    throw new Error('Hermex sedang offline. Coba lagi saat koneksi kembali.');
   }
 
   const response = await fetch(`${API_BASE}${path}`, {
@@ -108,7 +108,7 @@ export async function apiDelete<T>(path: string): Promise<T> {
 
 export async function apiPatch<T>(path: string, payload: unknown): Promise<T> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    throw new Error('Hermex is offline. Saved guest history and education are still available.');
+    throw new Error('Hermex sedang offline. Coba lagi saat koneksi kembali.');
   }
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'PATCH',

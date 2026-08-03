@@ -22,7 +22,7 @@
       await onNext(current + 1);
       current += 1;
     } catch (cause) {
-      loadError = cause instanceof Error ? cause.message : 'Pertanyaan berikutnya belum dapat dimuat.';
+      loadError = cause instanceof Error ? cause.message : 'Pertanyaan berikutnya belum siap.';
     } finally {
       loadingNext = false;
     }
@@ -90,8 +90,8 @@
   @media (max-width: 560px) {
     .questionnaire { margin: 32px auto; }
     legend { min-height: 4.6em; }
-    .ratings { gap: 7px; }
-    .ratings span { border-radius: 14px; }
+    .ratings { gap: 8px; }
+    .ratings span { border-radius: 14px; min-height: 44px; min-width: 44px; }
     footer button { flex: 1; padding: 0 12px; }
   }
   @media (prefers-reduced-motion: reduce) { .progress span, .ratings span { transition: none; } }

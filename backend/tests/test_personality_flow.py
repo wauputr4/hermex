@@ -2,10 +2,11 @@ import os
 import asyncio
 import copy
 import json
+import re
 import sqlite3
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -60,6 +61,13 @@ class PersonalityFlowTest(unittest.TestCase):
             )
         )
         public_text = " ".join(item["prompt"].lower() for item in questionnaire["questions"])
+        self.assertNotIn("saya", public_text)
+        self.assertTrue(
+            all(re.search(r"\baku\b", item["prompt"], re.IGNORECASE) for item in questionnaire["questions"])
+        )
+        self.assertTrue(
+            all(not re.search(r"\bsaya\b", item["prompt"], re.IGNORECASE) for item in questionnaire["questions"])
+        )
         for forbidden in ("astrologi", "zodiak", "planet", "rumah", "aspek", "chart", "kosmik"):
             self.assertNotIn(forbidden, public_text)
 
@@ -89,6 +97,14 @@ class PersonalityFlowTest(unittest.TestCase):
         )
         self.assertTrue(main.questionnaire_is_safe(original))
         self.assertTrue(main.questionnaire_is_safe(personalized))
+
+    def test_questionnaire_pronouns_match_whole_words(self) -> None:
+        questionnaire = main.build_questionnaire(main.derive_personality_signals(main.compute_chart(self.birth)))
+        questionnaire["questions"][0]["prompt"] = "Aku menjaga orang yang aku sayang ketika keadaan sulit."
+        self.assertTrue(main.questionnaire_is_safe(questionnaire))
+
+        questionnaire["questions"][0]["prompt"] = "Saya menjaga orang yang saya sayang ketika keadaan sulit."
+        self.assertFalse(main.questionnaire_is_safe(questionnaire))
 
     def test_guest_preview_does_not_include_full_analysis(self) -> None:
         response = {
@@ -127,6 +143,24 @@ class PersonalityFlowTest(unittest.TestCase):
         self.assertIn(main.masked_secret_label(secret), view)
         self.assertNotIn('id="api-key"', view)
         self.assertIn('id="api-key" type="password" value=""', edit)
+
+    def test_rate_limit_bucket_count_is_bounded(self) -> None:
+        now = datetime.now(timezone.utc)
+        main.RATE_LIMIT_BUCKETS.update({f"fresh-{index}": [now] for index in range(main.RATE_LIMIT_BUCKET_LIMIT)})
+        request = Request({"type": "http", "method": "POST", "path": "/api/test", "headers": []})
+
+        with self.assertRaises(HTTPException) as error:
+            main.enforce_public_write_rate_limit(request, "test", minute_limit=100, day_limit=1000)
+
+        self.assertEqual(error.exception.status_code, 429)
+        self.assertEqual(len(main.RATE_LIMIT_BUCKETS), main.RATE_LIMIT_BUCKET_LIMIT)
+        self.assertIn("fresh-0", main.RATE_LIMIT_BUCKETS)
+
+        main.RATE_LIMIT_BUCKETS.clear()
+        main.RATE_LIMIT_BUCKETS["stale"] = [now - timedelta(days=2)]
+        main.RATE_LIMIT_BUCKETS.update({f"active-{index}": [now] for index in range(main.RATE_LIMIT_BUCKET_LIMIT - 1)})
+        main.enforce_public_write_rate_limit(request, "test", minute_limit=100, day_limit=1000)
+        self.assertNotIn("stale", main.RATE_LIMIT_BUCKETS)
 
     def test_personality_response_unwraps_double_encoded_json_and_expands_sections(self) -> None:
         chart = main.compute_chart(self.birth)
@@ -209,14 +243,16 @@ class PersonalityFlowTest(unittest.TestCase):
 
     def test_questionnaire_generation_falls_back_without_provider(self) -> None:
         signals = main.derive_personality_signals(main.compute_chart(self.birth))
+        signals["angular_and_dominant_houses"]["angular_planets"] = []
         with patch.dict(os.environ, {"LLM_PROVIDER": "local_fallback"}):
             questionnaire = asyncio.run(main.generate_questionnaire(signals))
         self.assertEqual(questionnaire, main.build_questionnaire(signals))
         self.assertTrue(main.questionnaire_is_safe(questionnaire))
+        self.assertIn("Aku", questionnaire["questions"][8]["prompt"])
 
     def test_questionnaire_generation_uses_configured_ai(self) -> None:
         prompts = [
-            f"Pernyataan reflektif pribadi nomor {index} menggambarkan kebiasaan saya sehari-hari."
+            f"Aku melihat kebiasaan pribadiku lewat pernyataan reflektif nomor {index}."
             for index in range(1, 11)
         ]
         content = json.dumps({"questions": prompts})
@@ -305,6 +341,29 @@ class PersonalityFlowTest(unittest.TestCase):
                 with main.db() as conn:
                     body = conn.execute("SELECT body FROM sky_posts WHERE slug = ?", (slug,)).fetchone()["body"]
             self.assertIn("Tetap simpan ini.", body)
+
+    def test_current_sky_archive_is_seeded_by_default(self) -> None:
+        expected = {
+            "agustus-2025-ai-uranus-dan-gelembung",
+            "september-2025-kimmel-dan-siklus-24-tahun",
+            "oktober-2025-pencurian-louvre",
+            "november-2025-cloudflare-dan-merkurius",
+            "januari-2026-minneapolis-mars-pluto",
+            "februari-2026-super-bowl-bad-bunny",
+            "maret-2026-sora-ditutup",
+            "april-2026-percobaan-serangan-dan-uranus",
+            "mei-2026-ledakan-pabrik-kembang-api",
+            "juni-2026-gempa-venezuela",
+            "juli-2026-lindsey-graham",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "sky.db"
+            with patch.object(main, "DB_PATH", db_path):
+                main.init_db()
+                with main.db() as conn:
+                    seeded = {row[0] for row in conn.execute("SELECT slug FROM sky_posts")}
+        self.assertEqual(seeded, expected)
+        self.assertEqual(set(post["slug"] for post in main.default_sky_posts()), expected)
 
     def test_profile_owner_is_enforced_outside_self_hosted_mode(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

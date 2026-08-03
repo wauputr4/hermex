@@ -12,7 +12,7 @@
     },
     {
       icon: 'boundary',
-      title: 'Hasil tetap milikmu untuk ditimbang',
+      title: 'Hasilnya untuk kamu pertimbangkan',
       body: 'Hermex tidak memberi diagnosis atau kepastian tentang masa depan. Gunakan hasil sebagai bahan mengenali diri, bukan pengganti saran medis, psikologis, hukum, keuangan, atau keputusan penting.'
     }
   ];
@@ -45,7 +45,7 @@
     <div class="guide-title"><p class="eyebrow">Versi singkatnya</p><h2 id="plain-guide-title">Natal chart itu apa?</h2></div>
     <div class="guide-copy">
       <p>Bayangkan langit seperti foto 360° yang diambil tepat ketika kamu lahir. Tanggal dan jam menentukan posisi planet; lokasi menentukan bagian langit yang sedang naik di ufuk dan pembagian dua belas rumah.</p>
-      <p>Hermex memakai Swiss Ephemeris untuk menghitung posisi tersebut. Sesudah itu, jarak sudut antarplanet dikelompokkan sebagai aspek, misalnya konjungsi, trine, square, dan opposition. Tradisi astrologi memberi makna simbolik pada susunan ini; AI membantu merangkumnya dengan jawaban kuesionermu.</p>
+      <p>Hermex memakai Swiss Ephemeris untuk menghitung posisi ini. Sesudah itu, jarak sudut antarplanet dikelompokkan sebagai aspek, misalnya konjungsi, trine, square, dan opposition. Tradisi astrologi memberi makna simbolik pada susunan ini; AI membantu merangkumnya dengan jawaban kuesionermu.</p>
     </div>
   </section>
 
@@ -73,12 +73,10 @@
 
   <section class="references" aria-labelledby="references-title">
     <p class="eyebrow">Baca sumbernya</p>
-    <h2 id="references-title">Perhitungan nyata, interpretasi tetap perlu ditimbang</h2>
-    <p>Posisi benda langit dapat dihitung secara astronomis. Namun, klaim bahwa natal chart dapat menjelaskan kepribadian secara akurat belum didukung bukti ilmiah yang kuat. Karena itu Hermex menempatkan hasilnya sebagai alat refleksi.</p>
+    <h2 id="references-title">Posisinya bisa dihitung, tafsirnya tetap perlu dipikirkan</h2>
+    <p>Kita bisa menghitung posisi benda langit secara astronomis. Namun, belum ada bukti ilmiah yang kuat bahwa natal chart bisa menjelaskan kepribadian dengan akurat. Karena itu Hermex menyajikan hasilnya sebagai bahan refleksi.</p>
     <ul>
       <li><a href="https://www.astro.com/swisseph-download/doc/swisseph.htm" target="_blank" rel="noreferrer">Dokumentasi Swiss Ephemeris</a><span>Cara posisi planet, Ascendant, dan rumah dihitung oleh mesin yang dipakai Hermex.</span></li>
-      <li><a href="https://ssd.jpl.nasa.gov/planets/orbits.html" target="_blank" rel="noreferrer">JPL NASA: Planetary Orbits &amp; Ephemerides</a><span>Latar astronomi tentang ephemeris atau tabel posisi benda langit.</span></li>
-      <li><a href="https://www.nature.com/articles/318419a0.pdf" target="_blank" rel="noreferrer">Nature: A double-blind test of astrology</a><span>Penelitian terkontrol mengenai klaim natal chart dan kepribadian.</span></li>
     </ul>
   </section>
 
